@@ -46,6 +46,9 @@ packages = ["src/agentboundary"]
 
 # Include the schema + example receipts in the wheel so installing the package
 # gives you the spec authority without a second download.
+# TODO(phase-1+phase-2): `hatch build` fails here until docs/schemas/
+# and docs/receipts/ contain the real files. Phase 1 adds the schema;
+# Phase 2 adds the worked example receipts. `hatch test` is unaffected.
 [tool.hatch.build.targets.wheel.force-include]
 "docs/schemas/action-receipt-v0.1.json" = "agentboundary/_data/action-receipt-v0.1.json"
 "docs/receipts/github-merge.json" = "agentboundary/_data/examples/github-merge.json"
@@ -67,6 +70,7 @@ detached = true
 dependencies = [
     "ruff>=0.4",
     "mypy>=1.10",
+    "types-jsonschema>=4.21",
 ]
 
 [tool.hatch.envs.lint.scripts]

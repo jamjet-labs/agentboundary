@@ -34,10 +34,11 @@ Run the test suite:
 hatch test
 ```
 
-Run lint + types:
+Run lint + types (matches CI):
 
 ```bash
-hatch fmt --check
+hatch run lint:style
+hatch run lint:fmt --check
 hatch run lint:type
 ```
 

@@ -17,6 +17,15 @@ from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
 
 Decision = Literal["allow", "deny", "require-approval", "escalate"]
 
+# Returned by ``_match_policy`` when no policy in setup covers the requested
+# capability. Fail-closed: the action is denied and the receipt records that
+# no operator-authored policy participated in the decision.
+IMPLICIT_DENY_POLICY: dict[str, Any] = {
+    "name": "implicit.deny",
+    "version": "0",
+    "rule": "deny",
+}
+
 
 @dataclass(frozen=True)
 class RuntimeOutcome:
@@ -52,7 +61,7 @@ class ReferenceImplementation(Implementation):
         policy = _match_policy(setup.get("policies", []), capability)
         if policy is None:
             # No matching policy = deny by default (fail-closed).
-            policy = {"name": "implicit.deny", "version": "0", "rule": "deny"}
+            policy = IMPLICIT_DENY_POLICY
 
         approvals = setup.get("approvals", [])
         approval_for_cap = next((a for a in approvals if a.get("capability") == capability), None)
@@ -82,7 +91,7 @@ class ReferenceImplementation(Implementation):
             action=action,
             arguments=arguments,
             policy=policy,
-            decision=rule,  # policy.decision in the receipt = the rule itself
+            policy_decision=rule,
             executed=executed,
             approval=approval_for_cap,
         )
@@ -107,10 +116,20 @@ def _build_receipt(
     action: dict[str, Any],
     arguments: dict[str, Any],
     policy: dict[str, Any],
-    decision: str,
+    policy_decision: str,
     executed: bool,
     approval: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """Assemble an Action Receipt for the given action + policy outcome.
+
+    ``policy_decision`` records the POLICY RULE that fired (e.g.
+    "require-approval", "allow"). This is intentionally distinct from
+    the RUNTIME OUTCOME (``RuntimeOutcome.decision``), which can differ
+    when a require-approval policy is satisfied by a pre-existing
+    approval block — in that case ``policy_decision="require-approval"``
+    while ``RuntimeOutcome.decision="allow"``. Scenarios depend on the
+    bifurcation; do not flatten it.
+    """
     receipt: dict[str, Any] = {
         "version": "agentboundary/v0.1",
         "receipt_id": str(uuid.uuid4()),
@@ -123,7 +142,7 @@ def _build_receipt(
         "policy": {
             "name": policy["name"],
             "version": policy["version"],
-            "decision": decision,
+            "decision": policy_decision,
         },
     }
     if approval is not None:

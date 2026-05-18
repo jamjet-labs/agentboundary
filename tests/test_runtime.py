@@ -127,3 +127,35 @@ class TestReferenceImplementationRequireApproval:
         assert outcome.receipt["policy"]["decision"] == "require-approval"
         assert outcome.receipt["approval"]["approver"]["id"] == "user:lead"
         assert outcome.receipt["execution"]["status"] == "success"
+
+    def test_outcome_decision_diverges_from_receipt_policy_decision_when_approved(
+        self, basic_action: dict
+    ) -> None:
+        """When require-approval is satisfied by an existing approval, the
+        runtime outcome MUST be ``allow`` while the receipt's
+        ``policy.decision`` MUST stay ``require-approval``. This bifurcation
+        is the canary for adapters that incorrectly flatten the two.
+        """
+        impl = ReferenceImplementation()
+        setup = {
+            "policies": [
+                {
+                    "name": "p.appr",
+                    "version": "1",
+                    "rule": "require-approval",
+                    "capabilities": ["test.cap"],
+                }
+            ],
+            "approvals": [
+                {
+                    "capability": "test.cap",
+                    "approver": {"type": "human", "id": "user:lead"},
+                    "approved_at": "2026-06-15T14:22:30Z",
+                    "context": {},
+                }
+            ],
+        }
+        outcome = impl.attempt(basic_action, setup=setup)
+        assert outcome.decision == "allow"
+        assert outcome.receipt["policy"]["decision"] == "require-approval"
+        assert outcome.decision != outcome.receipt["policy"]["decision"]

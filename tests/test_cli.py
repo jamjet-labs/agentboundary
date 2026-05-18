@@ -52,3 +52,36 @@ class TestValidate:
         payload = json.loads(result.output)
         assert payload["valid"] is True
         assert payload["errors"] == []
+
+
+class TestRunSingleScenario:
+    def test_run_passes_for_happy_path(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["run", "scenarios/01-merge-allow.yaml"])
+        assert result.exit_code == 0
+        assert "PASS" in result.output
+        assert "01-merge-allow" in result.output
+
+    def test_run_passes_for_expected_negative(self, runner: CliRunner) -> None:
+        # Scenario 06 EXPECTS a schema failure; the scenario itself should PASS.
+        result = runner.invoke(main, ["run", "scenarios/06-missing-policy-block.yaml"])
+        assert result.exit_code == 0
+        assert "PASS" in result.output
+
+    def test_run_json_mode_emits_structured_document(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["run", "--json", "scenarios/01-merge-allow.yaml"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["passed"] == 1
+        assert payload["failed"] == 0
+        assert payload["results"][0]["scenario"] == "01-merge-allow"
+        assert payload["results"][0]["passed"] is True
+
+
+class TestRunDirectory:
+    def test_run_all_scenarios(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["run", "scenarios/"])
+        assert result.exit_code == 0
+        # All 10 should be present in the matrix
+        for n in range(1, 11):
+            assert f"{n:02d}-" in result.output
+        assert "10 passed · 0 failed" in result.output

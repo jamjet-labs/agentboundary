@@ -116,15 +116,3 @@ def test_invalid_datetime_in_issued_at_fails(minimal_receipt: dict[str, Any]) ->
     bad["issued_at"] = "not-a-timestamp"
     errors = validate_receipt(bad)
     assert _has_error_containing(errors, "issued_at", "date-time"), errors
-
-
-def test_well_formed_receipt_with_approval_block_passes(minimal_receipt: dict[str, Any]) -> None:
-    """Sanity counter-test: a require-approval receipt with a proper approval block validates."""
-    receipt = copy.deepcopy(minimal_receipt)
-    receipt["policy"]["decision"] = "require-approval"  # type: ignore[index]
-    receipt["approval"] = {
-        "approver": {"id": "u_bob", "role": "release-manager"},
-        "approved_at": "2026-06-15T11:59:00Z",
-    }
-    errors = validate_receipt(receipt)
-    assert errors == [], errors

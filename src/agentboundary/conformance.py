@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
-from agentboundary.validator import validate_receipt
+from agentboundary.validator import iter_schema_errors, validate_receipt
 
 Severity = Literal["fail", "info"]
 
@@ -34,23 +34,63 @@ class ConformanceCheck:
 
 _LEVEL_2_DECISIONS = {"allow", "deny", "require-approval", "escalate"}
 
-_L3_HASH_FIELD_ERRORS = {
-    "root: 'arguments_hash' is a required property",
-    "root: 'receipt_hash' is a required property",
-}
+_L3_HASH_FIELDS = frozenset({"arguments_hash", "receipt_hash"})
 
 
-def _schema_failure_is_only_missing_hashes(schema_errors: list[str]) -> bool:
+# TODO(W3-followup): remove when the v0.2 schema makes arguments_hash and
+# receipt_hash optional at the top level. See the spec §5.1 / §5.3 ambiguity.
+def _schema_failure_is_only_missing_hashes(receipt: dict[str, Any]) -> bool:
     """True iff every schema error is a missing-arguments_hash/receipt_hash error.
+
+    Uses ``iter_schema_errors`` so the decision is made structurally
+    (``err.validator == "required"`` plus the missing property name) rather
+    than by string-matching jsonschema's human-readable wording. This keeps
+    the workaround working across jsonschema version bumps that may reword
+    error messages.
 
     Used to decide whether we can still emit the L3 hash-required checks
     after a schema short-circuit. If the receipt is broadly malformed (e.g.
     missing the actor block), we don't surface L3 codes because the caller
     has bigger problems to fix first.
     """
-    if not schema_errors:
+    errors = iter_schema_errors(receipt)
+    if not errors:
         return False
-    return all(err in _L3_HASH_FIELD_ERRORS for err in schema_errors)
+    for err in errors:
+        if err.validator != "required":
+            return False
+        # A required-property error at depth N reports a SINGLE missing
+        # property in its message; the absolute path is the parent. We only
+        # care about top-level (root) misses for the L3 hash workaround.
+        if list(err.absolute_path):
+            return False
+        missing = _extract_missing_property(err)
+        if missing is None or missing not in _L3_HASH_FIELDS:
+            return False
+    return True
+
+
+def _extract_missing_property(err: Any) -> str | None:
+    """Parse the missing property name out of a ``required`` ValidationError.
+
+    jsonschema reports required-property failures with messages of the form
+    ``"'foo' is a required property"`` and ``err.validator_value`` set to the
+    list of required keys at that level. We pull the name out of the message
+    rather than the validator_value list because the message identifies the
+    *specific* missing property (validator_value is the full required set,
+    not just the missing subset).
+    """
+    msg = err.message
+    if "is a required property" not in msg:
+        return None
+    # Message format: "'<name>' is a required property"
+    start = msg.find("'")
+    if start < 0:
+        return None
+    end = msg.find("'", start + 1)
+    if end < 0:
+        return None
+    return msg[start + 1 : end]
 
 
 def check_conformance(
@@ -88,7 +128,10 @@ def check_conformance(
         # "you forgot the L3 hashes". When the receipt is broadly malformed,
         # short-circuit entirely and let the caller fix the structural issues
         # first.
-        if level >= 3 and _schema_failure_is_only_missing_hashes(schema_errors):
+        # TODO(W3-followup): remove when the v0.2 schema makes arguments_hash
+        # and receipt_hash optional at the top level. See the spec §5.1 /
+        # §5.3 ambiguity.
+        if level >= 3 and _schema_failure_is_only_missing_hashes(receipt):
             if "arguments_hash" not in receipt:
                 results.append(
                     ConformanceCheck(

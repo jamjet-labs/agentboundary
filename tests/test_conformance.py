@@ -134,6 +134,66 @@ class TestLevel4:
         assert l4_fails == []
 
 
+class TestInvalidLevel:
+    def test_level_zero_raises(self, minimal_l3_receipt: dict) -> None:
+        with pytest.raises(ValueError, match=r"level must be in 1\.\.4"):
+            check_conformance(minimal_l3_receipt, level=0)
+
+    def test_level_five_raises(self, minimal_l3_receipt: dict) -> None:
+        with pytest.raises(ValueError, match=r"level must be in 1\.\.4"):
+            check_conformance(minimal_l3_receipt, level=5)
+
+
+class TestSchemaShortCircuitWorkaround:
+    """Pins the narrow rule that lets LEVEL_3_*_REQUIRED codes surface even
+    when the schema also rejects the receipt for missing those same fields.
+
+    See conformance.py: _schema_failure_is_only_missing_hashes."""
+
+    def test_both_hashes_missing_emits_both_l3_required_codes(
+        self, minimal_l3_receipt: dict
+    ) -> None:
+        receipt = deepcopy(minimal_l3_receipt)
+        del receipt["arguments_hash"]
+        del receipt["receipt_hash"]
+        checks = check_conformance(receipt, level=3)
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_3_ARGUMENTS_HASH_REQUIRED" in codes
+        assert "LEVEL_3_RECEIPT_HASH_REQUIRED" in codes
+
+    def test_schema_fails_for_other_reasons_suppresses_l3_codes(
+        self, minimal_l3_receipt: dict
+    ) -> None:
+        receipt = deepcopy(minimal_l3_receipt)
+        # Make the receipt fail schema for a reason UNRELATED to hashes:
+        # drop both hashes AND drop the policy block. The L3 helper should
+        # NOT fire because the schema errors are not exclusively about hashes.
+        del receipt["arguments_hash"]
+        del receipt["receipt_hash"]
+        del receipt["policy"]
+        checks = check_conformance(receipt, level=3)
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "SCHEMA_INVALID" in codes
+        assert "LEVEL_3_ARGUMENTS_HASH_REQUIRED" not in codes
+        assert "LEVEL_3_RECEIPT_HASH_REQUIRED" not in codes
+
+    def test_jsonschema_required_error_shape_is_stable(self) -> None:
+        """If jsonschema changes its required-property error shape, the
+        workaround silently stops firing. This regression test catches that."""
+        from agentboundary.validator import iter_schema_errors
+
+        errors = list(iter_schema_errors({}))
+        required_errors = [e for e in errors if e.validator == "required"]
+        assert required_errors, "expected at least one 'required' validator error"
+        # Required-property errors carry the missing property name either in
+        # err.message (e.g. "'foo' is a required property") or err.validator_value
+        # (the list of required keys at that level). Pin both behaviours so a
+        # jsonschema upgrade that breaks either path fails this test loudly.
+        sample = required_errors[0]
+        assert "is a required property" in sample.message
+        assert isinstance(sample.validator_value, list)
+
+
 class TestOutputOrdering:
     def test_checks_sorted_by_level_then_code(self, minimal_l3_receipt: dict) -> None:
         checks = check_conformance(minimal_l3_receipt, level=4, arguments={"x": 1})

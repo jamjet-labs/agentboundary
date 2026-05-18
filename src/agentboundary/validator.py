@@ -3,13 +3,17 @@
 The validator returns a list of human-readable error strings rather than
 raising. This shape supports the future CLI use case where we want to
 report ALL problems with a receipt in one pass, not just the first.
+
+For callers that need to inspect the underlying schema errors structurally
+(e.g. conformance.py needs to detect "required" failures without coupling
+to error message wording), use ``iter_schema_errors`` instead.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 
 from agentboundary._schema import load_action_receipt_schema
 
@@ -26,11 +30,27 @@ def validate_receipt(receipt: dict[str, Any]) -> list[str]:
     Draft202012Validator.FORMAT_CHECKER, which depends on the
     jsonschema[format-nongpl] extras installed by this package.
     """
+    return [_format_error(err) for err in iter_schema_errors(receipt)]
+
+
+def iter_schema_errors(receipt: dict[str, Any]) -> list[ValidationError]:
+    """Return raw ``jsonschema.ValidationError`` objects for ``receipt``.
+
+    Same sort order as ``validate_receipt`` (depth then path) so callers can
+    rely on a stable ordering. Returns an empty list when the receipt is
+    valid.
+
+    This is the lower-level cousin of ``validate_receipt``: it exposes the
+    structured ValidationError objects so callers can branch on
+    ``err.validator`` (e.g. ``"required"``, ``"enum"``, ``"type"``) and
+    ``err.validator_value`` without parsing the human-readable message.
+
+    Downstream callers (conformance checks, CLI) use this to make decisions
+    that must not couple to jsonschema's exact error-message wording.
+    """
     schema = load_action_receipt_schema()
     validator = Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
-    return [
-        _format_error(err) for err in sorted(validator.iter_errors(receipt), key=_error_sort_key)
-    ]
+    return sorted(validator.iter_errors(receipt), key=_error_sort_key)
 
 
 def _format_error(err: Any) -> str:

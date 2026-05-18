@@ -18,11 +18,16 @@ def validate_receipt(receipt: dict[str, Any]) -> list[str]:
     """Validate a receipt dict against the v0.1 schema.
 
     Returns an empty list if the receipt is valid. Otherwise returns a list
-    of human-readable error messages, one per schema violation. The order
-    matches the order jsonschema reports them; callers may sort if needed.
+    of human-readable error messages, one per schema violation, sorted by
+    depth then path (root-level errors first, then nested errors in
+    alphabetical path order).
+
+    `format` keywords (uuid, date-time) are enforced via
+    Draft202012Validator.FORMAT_CHECKER, which depends on the
+    jsonschema[format-nongpl] extras installed by this package.
     """
     schema = load_action_receipt_schema()
-    validator = Draft202012Validator(schema)
+    validator = Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
     return [
         _format_error(err) for err in sorted(validator.iter_errors(receipt), key=_error_sort_key)
     ]

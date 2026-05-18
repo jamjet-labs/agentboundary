@@ -73,7 +73,9 @@ def test_require_approval_decision_without_approval_block_fails(
     )
 
 
-def test_missing_policy_does_not_spuriously_require_approval(minimal_receipt: dict[str, Any]) -> None:
+def test_missing_policy_does_not_spuriously_require_approval(
+    minimal_receipt: dict[str, Any],
+) -> None:
     """When `policy` is absent entirely, the validator must emit ONE error
     (policy is required) — not two (policy required AND approval required).
     This guards against the JSON Schema vacuous-truth bug where `if {properties: {policy: ...}}`
@@ -98,6 +100,22 @@ def test_additional_properties_at_root_are_rejected(minimal_receipt: dict[str, A
     bad["vendor_extension"] = {"foo": "bar"}
     errors = validate_receipt(bad)
     assert any("vendor_extension" in e for e in errors), errors
+
+
+def test_invalid_uuid_in_receipt_id_fails(minimal_receipt: dict[str, Any]) -> None:
+    """receipt_id has format: uuid in the schema. Enforced via FORMAT_CHECKER."""
+    bad = copy.deepcopy(minimal_receipt)
+    bad["receipt_id"] = "not-a-uuid-at-all"
+    errors = validate_receipt(bad)
+    assert _has_error_containing(errors, "receipt_id", "uuid"), errors
+
+
+def test_invalid_datetime_in_issued_at_fails(minimal_receipt: dict[str, Any]) -> None:
+    """issued_at has format: date-time (RFC 3339). Enforced via FORMAT_CHECKER."""
+    bad = copy.deepcopy(minimal_receipt)
+    bad["issued_at"] = "not-a-timestamp"
+    errors = validate_receipt(bad)
+    assert _has_error_containing(errors, "issued_at", "date-time"), errors
 
 
 def test_well_formed_receipt_with_approval_block_passes(minimal_receipt: dict[str, Any]) -> None:

@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "jsonschema>=4.21,<5.0",
+    "jsonschema[format-nongpl]>=4.21,<5.0",
 ]
 
 [project.optional-dependencies]
@@ -44,16 +44,11 @@ Issues = "https://github.com/jamjet-labs/agentboundary/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentboundary"]
 
-# Include the schema + example receipts in the wheel so installing the package
-# gives you the spec authority without a second download.
-# TODO(phase-1+phase-2): `hatch build` fails here until docs/schemas/
-# and docs/receipts/ contain the real files. Phase 1 adds the schema;
-# Phase 2 adds the worked example receipts. `hatch test` is unaffected.
+# Include the schema in the wheel so installing the package gives you the
+# spec authority without a second download. Worked-example receipts will be
+# added back here in Phase 2 when the files at docs/receipts/*.json land.
 [tool.hatch.build.targets.wheel.force-include]
 "docs/schemas/action-receipt-v0.1.json" = "agentboundary/_data/action-receipt-v0.1.json"
-"docs/receipts/github-merge.json" = "agentboundary/_data/examples/github-merge.json"
-"docs/receipts/spring-service-mutation.json" = "agentboundary/_data/examples/spring-service-mutation.json"
-"docs/receipts/stripe-refund.json" = "agentboundary/_data/examples/stripe-refund.json"
 
 [tool.hatch.envs.default]
 dependencies = [

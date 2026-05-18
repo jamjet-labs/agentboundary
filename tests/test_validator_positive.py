@@ -37,3 +37,9 @@ def test_spring_service_mutation_example_validates(examples_dir: Path) -> None:
     receipt = json.loads((examples_dir / "spring-service-mutation.json").read_text())
     errors = validate_receipt(receipt)
     assert errors == [], f"spring-service-mutation.json should validate. Errors: {errors}"
+
+
+def test_stripe_refund_example_validates(examples_dir: Path) -> None:
+    receipt = json.loads((examples_dir / "stripe-refund.json").read_text())
+    errors = validate_receipt(receipt)
+    assert errors == [], f"stripe-refund.json should validate. Errors: {errors}"

@@ -1,0 +1,37 @@
+{
+  "version": "agentboundary/v0.1",
+  "receipt_id": "0192c8d2-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+  "issued_at": "2026-06-15T16:02:17Z",
+  "actor": {
+    "type": "agent",
+    "id": "agent:support-triage:incident/INC-44231",
+    "display_name": "Support triage bot"
+  },
+  "agent": {
+    "framework": "openai-agents-sdk",
+    "framework_version": "0.18.2",
+    "model": "gpt-5.5-mini"
+  },
+  "tool": {
+    "name": "stripe-mcp",
+    "version": "1.2.0",
+    "capability": "stripe.refund"
+  },
+  "target": {
+    "system": "api.stripe.com",
+    "environment": "prod",
+    "resource_id": "ch_3PqL8aR2eZ4nX1qB1G7Y0wXz"
+  },
+  "arguments_hash": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+  "policy": {
+    "name": "acme.refunds.under-500-auto-approve",
+    "version": "8",
+    "decision": "allow"
+  },
+  "execution": {
+    "status": "success",
+    "completed_at": "2026-06-15T16:02:18Z",
+    "result_ref": "re_3PqL8aR2eZ4nX1qB1G7Y0wXz"
+  },
+  "receipt_hash": "dd22334455667788990011aabbccddeeff22334455667788990011aabbccddec"
+}

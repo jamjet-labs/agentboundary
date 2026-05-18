@@ -1,0 +1,32 @@
+name: 05-refund-escalate
+description: |
+  $5,000 refund over the $100 auto-limit. Escalates to a human approver;
+  receipt records escalation, no execution block present.
+setup:
+  policies:
+    - name: acme.refunds
+      version: "1"
+      rule: escalate
+      capabilities: [stripe.refund]
+      limit:
+        field: amount_cents
+        max: 10000
+action:
+  actor: { type: agent, id: "agent:support-bot:session/demo" }
+  agent:
+    framework: openai-agents
+    framework_version: "0.1.0"
+    model: gpt-4o-mini
+    model_version: "2024-07-18"
+  tool: { name: stripe, version: "12.0.0", capability: stripe.refund }
+  target:
+    system: stripe.com
+    environment: prod
+    resource_id: charge/ch_xyz789
+  arguments: { charge_id: "ch_xyz789", amount_cents: 500000, reason: "fraud" }
+expect:
+  decision: escalate
+  conformance_level: 2
+  receipt_must_validate: true
+  assertions:
+    - { field: policy.decision, equals: escalate }

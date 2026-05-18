@@ -1,0 +1,37 @@
+name: 02-mutation-require-approval
+description: |
+  Spring service mutation that requires approval. The setup supplies an
+  approver; the reference impl emits a receipt with the approval block populated.
+setup:
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2026-06-15T14:22:30Z"
+      context: { ticket: ACME-1287 }
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true
+  assertions:
+    - { field: policy.decision, equals: require-approval }
+    - { field: approval.approver.id, equals: "user:eng-lead@acme" }

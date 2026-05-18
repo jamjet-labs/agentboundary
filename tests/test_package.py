@@ -15,9 +15,11 @@ def test_package_exposes_version() -> None:
 
 def test_validate_receipt_is_importable_from_top_level() -> None:
     from agentboundary import validate_receipt
+
     assert callable(validate_receipt)
 
 
 def test_load_action_receipt_schema_is_importable_from_top_level() -> None:
     from agentboundary import load_action_receipt_schema
+
     assert callable(load_action_receipt_schema)

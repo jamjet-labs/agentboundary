@@ -45,7 +45,9 @@ def test_stripe_refund_example_validates(examples_dir: Path) -> None:
     assert errors == [], f"stripe-refund.json should validate. Errors: {errors}"
 
 
-def test_deny_policy_decision_with_blocked_execution_validates(minimal_receipt: dict[str, Any]) -> None:
+def test_deny_policy_decision_with_blocked_execution_validates(
+    minimal_receipt: dict[str, Any],
+) -> None:
     """A receipt with policy.decision=deny and execution.status=blocked is the canonical
     'denied action' shape per spec section 3.3. No approval block required."""
     receipt = copy.deepcopy(minimal_receipt)
@@ -55,7 +57,9 @@ def test_deny_policy_decision_with_blocked_execution_validates(minimal_receipt: 
     assert errors == [], errors
 
 
-def test_escalate_policy_decision_with_blocked_execution_validates(minimal_receipt: dict[str, Any]) -> None:
+def test_escalate_policy_decision_with_blocked_execution_validates(
+    minimal_receipt: dict[str, Any],
+) -> None:
     """A receipt with policy.decision=escalate and execution.status=blocked is the
     'escalated but unresolved' shape per spec section 3.5."""
     receipt = copy.deepcopy(minimal_receipt)
@@ -65,7 +69,9 @@ def test_escalate_policy_decision_with_blocked_execution_validates(minimal_recei
     assert errors == [], errors
 
 
-def test_allow_policy_decision_with_optional_approval_validates(minimal_receipt: dict[str, Any]) -> None:
+def test_allow_policy_decision_with_optional_approval_validates(
+    minimal_receipt: dict[str, Any],
+) -> None:
     """v0.1 section 7.1 documents that allow + approval is permitted (but discouraged).
     This test locks in the v0.1 position: schema does NOT reject the combination."""
     receipt = copy.deepcopy(minimal_receipt)

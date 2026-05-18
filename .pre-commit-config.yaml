@@ -1,0 +1,30 @@
+# Run with: pre-commit run --all-files
+# Install with: pre-commit install
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: dco-signoff
+        name: enforce DCO sign-off
+        entry: bash -c 'msg=$(git log -1 --pretty=%B); if ! echo "$msg" | grep -q "^Signed-off-by:"; then echo "Commit message missing Signed-off-by line. Use git commit -s."; exit 1; fi'
+        language: system
+        stages: [commit-msg]
+        always_run: true

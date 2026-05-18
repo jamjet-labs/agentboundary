@@ -17,10 +17,10 @@ def runner() -> CliRunner:
 
 
 @pytest.fixture
-def valid_receipt(tmp_path: Path) -> Path:
-    text = (Path("docs/receipts/github-merge.json")).read_text()
+def valid_receipt(tmp_path: Path, examples_dir: Path) -> Path:
+    src = examples_dir / "github-merge.json"
     out = tmp_path / "r.json"
-    out.write_text(text)
+    out.write_text(src.read_text())
     return out
 
 

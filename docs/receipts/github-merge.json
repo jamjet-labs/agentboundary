@@ -1,0 +1,38 @@
+{
+  "version": "agentboundary/v0.1",
+  "receipt_id": "0192c8d0-1f2a-7c3e-bf2a-1a4d3f5e6c7b",
+  "issued_at": "2026-06-15T14:23:08Z",
+  "actor": {
+    "type": "agent",
+    "id": "agent:claude-code:session/789abc",
+    "display_name": "Claude Code (Sunil's session)"
+  },
+  "agent": {
+    "framework": "claude-code",
+    "framework_version": "2.4.1",
+    "model": "claude-opus-4-7",
+    "model_version": "20260101"
+  },
+  "tool": {
+    "name": "github-mcp",
+    "version": "0.7.0",
+    "capability": "github.merge"
+  },
+  "target": {
+    "system": "github.com/jamjet-labs/agentboundary",
+    "environment": "prod",
+    "resource_id": "pull/14"
+  },
+  "arguments_hash": "3d4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a",
+  "policy": {
+    "name": "agentboundary.repo.merges",
+    "version": "2",
+    "decision": "allow"
+  },
+  "execution": {
+    "status": "success",
+    "completed_at": "2026-06-15T14:23:09Z",
+    "result_ref": "sha:b1c2d3e4f5a6"
+  },
+  "receipt_hash": "ff00112233445566778899aabbccddeeff00112233445566778899aabbccddee"
+}

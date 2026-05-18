@@ -1,6 +1,8 @@
 """Validator positive-path tests. A well-formed receipt must validate cleanly."""
 
 import copy
+import json
+from pathlib import Path
 from typing import Any
 
 from agentboundary.validator import validate_receipt
@@ -23,3 +25,9 @@ def test_require_approval_with_approval_block_validates(minimal_receipt: dict[st
     }
     errors = validate_receipt(receipt)
     assert errors == [], errors
+
+
+def test_github_merge_example_validates(examples_dir: Path) -> None:
+    receipt = json.loads((examples_dir / "github-merge.json").read_text())
+    errors = validate_receipt(receipt)
+    assert errors == [], f"github-merge.json should validate. Errors: {errors}"

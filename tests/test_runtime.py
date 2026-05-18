@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
 from agentboundary.runtime import (
     Implementation,
     ReferenceImplementation,
@@ -159,3 +160,59 @@ class TestReferenceImplementationRequireApproval:
         assert outcome.decision == "allow"
         assert outcome.receipt["policy"]["decision"] == "require-approval"
         assert outcome.decision != outcome.receipt["policy"]["decision"]
+
+
+class TestInjectHooks:
+    @pytest.fixture
+    def allow_action_with_inject(self, basic_action: dict, allow_setup: dict) -> tuple[dict, dict]:
+        return basic_action, allow_setup
+
+    def test_omit_field_removes_top_level_key(
+        self, allow_action_with_inject: tuple[dict, dict]
+    ) -> None:
+        action, setup = allow_action_with_inject
+        action = {**action, "inject": [{"op": "omit_field", "path": "policy", "after": "emit"}]}
+        outcome = ReferenceImplementation().attempt(action, setup=setup)
+        assert "policy" not in outcome.receipt
+
+    def test_mutate_field_replaces_value(self, allow_action_with_inject: tuple[dict, dict]) -> None:
+        action, setup = allow_action_with_inject
+        action = {
+            **action,
+            "inject": [
+                {"op": "mutate_field", "path": "issued_at", "value": "garbage", "after": "emit"}
+            ],
+        }
+        outcome = ReferenceImplementation().attempt(action, setup=setup)
+        assert outcome.receipt["issued_at"] == "garbage"
+
+    def test_tamper_arguments_hash_changes_value(
+        self, allow_action_with_inject: tuple[dict, dict]
+    ) -> None:
+        action, setup = allow_action_with_inject
+        action = {**action, "inject": [{"op": "tamper_arguments_hash", "after": "emit"}]}
+        outcome = ReferenceImplementation().attempt(action, setup=setup)
+        original = compute_arguments_hash(action["arguments"])
+        assert outcome.receipt["arguments_hash"] != original
+        assert len(outcome.receipt["arguments_hash"]) == 64
+
+    def test_tamper_receipt_hash_changes_value(
+        self, allow_action_with_inject: tuple[dict, dict]
+    ) -> None:
+        action, setup = allow_action_with_inject
+        action = {**action, "inject": [{"op": "tamper_receipt_hash", "after": "emit"}]}
+        outcome = ReferenceImplementation().attempt(action, setup=setup)
+        # The tampered hash must NOT match the recomputed one
+        assert outcome.receipt["receipt_hash"] != compute_receipt_hash(outcome.receipt)
+        assert len(outcome.receipt["receipt_hash"]) == 64
+
+    def test_omit_field_on_arguments_hash(
+        self, allow_action_with_inject: tuple[dict, dict]
+    ) -> None:
+        action, setup = allow_action_with_inject
+        action = {
+            **action,
+            "inject": [{"op": "omit_field", "path": "arguments_hash", "after": "emit"}],
+        }
+        outcome = ReferenceImplementation().attempt(action, setup=setup)
+        assert "arguments_hash" not in outcome.receipt

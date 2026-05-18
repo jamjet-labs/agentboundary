@@ -96,6 +96,9 @@ class ReferenceImplementation(Implementation):
             approval=approval_for_cap,
         )
 
+        for op in action.get("inject", []):
+            receipt = _apply_inject(receipt, op)
+
         return RuntimeOutcome(decision=decision, receipt=receipt, arguments=arguments)
 
 
@@ -159,3 +162,41 @@ def _build_receipt(
         }
     receipt["receipt_hash"] = compute_receipt_hash(receipt)
     return receipt
+
+
+def _apply_inject(receipt: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]:
+    """Apply one inject op to ``receipt``. Returns the (possibly mutated) receipt dict.
+
+    Inject ops are used by negative-path scenarios (06-10) to simulate
+    real-world receipt corruption: a missing field, a malformed value, or
+    a tampered hash. The reference implementation honours the inject AFTER
+    emitting a fully-formed valid receipt, so each negative scenario isolates
+    exactly one failure mode.
+    """
+    kind = op["op"]
+    if kind == "omit_field":
+        receipt.pop(op["path"], None)
+        return receipt
+    if kind == "mutate_field":
+        receipt[op["path"]] = op["value"]
+        return receipt
+    if kind == "tamper_arguments_hash":
+        # Flip the first hex byte; result is still 64-char hex but no longer
+        # matches the canonical-JSON SHA-256 of the original arguments.
+        current = receipt.get("arguments_hash", "0" * 64)
+        receipt["arguments_hash"] = _flip_first_hex_byte(current)
+        return receipt
+    if kind == "tamper_receipt_hash":
+        current = receipt.get("receipt_hash", "0" * 64)
+        receipt["receipt_hash"] = _flip_first_hex_byte(current)
+        return receipt
+    raise ValueError(f"unknown inject op: {kind}")
+
+
+def _flip_first_hex_byte(h: str) -> str:
+    """Return ``h`` with its first hex character XOR-flipped (still valid hex)."""
+    if not h:
+        return "f" * 64
+    first = h[0]
+    flipped = format(int(first, 16) ^ 0xF, "x")
+    return flipped + h[1:]

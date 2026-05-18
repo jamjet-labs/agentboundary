@@ -1,0 +1,30 @@
+name: 10-claim-level-3-without-hash
+description: |
+  Scenario forces the reference impl to omit arguments_hash, then claims Level 3.
+  Expected: conformance fails with LEVEL_3_ARGUMENTS_HASH_REQUIRED.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+  inject:
+    - { op: omit_field, path: arguments_hash, after: emit }
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_3_ARGUMENTS_HASH_REQUIRED"]

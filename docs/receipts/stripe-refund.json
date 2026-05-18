@@ -22,7 +22,7 @@
     "environment": "prod",
     "resource_id": "ch_3PqL8aR2eZ4nX1qB1G7Y0wXz"
   },
-  "arguments_hash": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+  "arguments_hash": "e65add6aa17488de46d19a71999c74dbcb6baeadd42c5186e9ab3ca68e7aeb12",
   "policy": {
     "name": "acme.refunds.under-500-auto-approve",
     "version": "8",
@@ -31,7 +31,7 @@
   "execution": {
     "status": "success",
     "completed_at": "2026-06-15T16:02:18Z",
-    "result_ref": "re_3PqL8aR2eZ4nX1qB1G7Y0wXz"
+    "result_ref": "re_1OHl3gLkdIwHu7ixGGvTXKJe"
   },
-  "receipt_hash": "dd22334455667788990011aabbccddeeff22334455667788990011aabbccddec"
+  "receipt_hash": "ae5c8f132c2258825d9bb8a691bb7b20768b8cc72f0d23326b142a8a6204eb8e"
 }

@@ -23,7 +23,7 @@
     "environment": "prod",
     "resource_id": "claim/CL-2026-00078321"
   },
-  "arguments_hash": "8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a90",
+  "arguments_hash": "3558525f1618231eb02fb3b7fcd1903b008a7e965521f06bf96166d1344e33f5",
   "policy": {
     "name": "acme.claims.mutations.require-second-approver",
     "version": "5",
@@ -43,5 +43,5 @@
     "completed_at": "2026-06-15T15:11:43Z",
     "result_ref": "claim/CL-2026-00078321/rev/12"
   },
-  "receipt_hash": "ee11223344556677889900aabbccddeeff11223344556677889900aabbccddeb"
+  "receipt_hash": "d9a85a384d18dfca317e73f6ad9dab10ed0aa0c81f20491d67b229ae742a8f39"
 }

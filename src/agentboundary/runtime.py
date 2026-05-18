@@ -7,6 +7,7 @@ plug in as additional ``Implementation`` subclasses in W7+.
 
 from __future__ import annotations
 
+import json
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -149,16 +150,41 @@ def _build_receipt(
         },
     }
     if approval is not None:
-        receipt["approval"] = {
-            "approver": approval["approver"],
+        # Translate setup-shape approver ({type, id}) to schema-shape approver
+        # ({id, display_name?, role?}). Setup's "type" is metadata for matching;
+        # the receipt records only what the schema permits.
+        setup_approver = approval["approver"]
+        receipt_approver: dict[str, Any] = {"id": setup_approver["id"]}
+        if "display_name" in setup_approver:
+            receipt_approver["display_name"] = setup_approver["display_name"]
+        if "role" in setup_approver:
+            receipt_approver["role"] = setup_approver["role"]
+        approval_block: dict[str, Any] = {
+            "approver": receipt_approver,
             "approved_at": approval["approved_at"],
-            "context": approval.get("context", {}),
         }
+        # Schema requires approval.context to be a string. Setup commonly carries
+        # a structured context object; collapse it to a deterministic string
+        # representation so the receipt validates.
+        ctx = approval.get("context")
+        if ctx is not None:
+            if isinstance(ctx, str):
+                approval_block["context"] = ctx
+            else:
+                approval_block["context"] = json.dumps(ctx, sort_keys=True, separators=(",", ":"))
+        receipt["approval"] = approval_block
     if executed:
         receipt["execution"] = {
             "status": "success",
             "completed_at": _now_rfc3339(),
             "result_ref": f"ref:{receipt['receipt_id'][:8]}",
+        }
+    else:
+        # Spec §3.3/§3.5: deny/escalate/require-approval still emit an
+        # execution block with status=blocked so receipts have a uniform shape.
+        receipt["execution"] = {
+            "status": "blocked",
+            "completed_at": _now_rfc3339(),
         }
     receipt["receipt_hash"] = compute_receipt_hash(receipt)
     return receipt

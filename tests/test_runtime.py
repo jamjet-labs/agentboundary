@@ -63,7 +63,9 @@ class TestReferenceImplementationAllow:
 
 
 class TestReferenceImplementationDeny:
-    def test_deny_returns_no_execution(self, basic_action: dict) -> None:
+    def test_deny_emits_blocked_execution(self, basic_action: dict) -> None:
+        """Spec §3.3: deny still emits an execution block with status=blocked
+        so receipts have a uniform shape (validator_positive covers this)."""
         impl = ReferenceImplementation()
         setup = {
             "policies": [
@@ -78,11 +80,12 @@ class TestReferenceImplementationDeny:
         outcome = impl.attempt(basic_action, setup=setup)
         assert outcome.decision == "deny"
         assert outcome.receipt is not None
-        assert "execution" not in outcome.receipt
+        assert outcome.receipt["execution"]["status"] == "blocked"
 
 
 class TestReferenceImplementationEscalate:
-    def test_escalate_returns_no_execution(self, basic_action: dict) -> None:
+    def test_escalate_emits_blocked_execution(self, basic_action: dict) -> None:
+        """Spec §3.5: escalate still emits an execution block with status=blocked."""
         impl = ReferenceImplementation()
         setup = {
             "policies": [
@@ -97,7 +100,7 @@ class TestReferenceImplementationEscalate:
         outcome = impl.attempt(basic_action, setup=setup)
         assert outcome.decision == "escalate"
         assert outcome.receipt is not None
-        assert "execution" not in outcome.receipt
+        assert outcome.receipt["execution"]["status"] == "blocked"
 
 
 class TestReferenceImplementationRequireApproval:

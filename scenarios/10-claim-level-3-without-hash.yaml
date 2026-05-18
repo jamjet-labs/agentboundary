@@ -26,5 +26,10 @@ action:
 expect:
   decision: allow
   conformance_level: 3
-  receipt_must_validate: true
+  # arguments_hash is required by the v0.1 schema, so removing it also
+  # causes a schema failure. The point of this scenario is the level-3
+  # conformance signal, but receipt_must_validate must be false to reflect
+  # the schema reality. v0.2 (W3-followup) makes arguments_hash optional at
+  # the schema level; this scenario will tighten back to true at that point.
+  receipt_must_validate: false
   failures_must_include: ["LEVEL_3_ARGUMENTS_HASH_REQUIRED"]

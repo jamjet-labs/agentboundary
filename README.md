@@ -4,6 +4,22 @@
 
 **Status:** v0.0.1 — pre-launch. The full v0.1 specification, runner, and conformance test suite are under active development. This repo will be public at the W4 launch (planned 2026-06-15). Until then, the README intentionally does not pitch the project — the v4 operating memo at `jamjet-business/PM-MEMO-2026-05-18-v4.md` describes the launch surface.
 
+## Run the conformance suite (60 seconds, no signup)
+
+```bash
+npx agentboundary run examples/github-merge.yaml
+# or
+uvx agentboundary run examples/github-merge.yaml
+```
+
+Run all 10 scenarios at once:
+
+```bash
+npx agentboundary run scenarios/
+```
+
+Each scenario is named for the failure it prevents. The runner emits an Action Receipt for each scenario, validates it against the v0.1 schema, checks it against the spec §5 conformance levels, and prints a pass/fail matrix. Exit code is `0` when every scenario passes, `1` otherwise. Add `--json` for machine-readable output.
+
 ## What's here today
 
 - [`docs/spec/v0.1.md`](docs/spec/v0.1.md) — the v0.1 specification (definitions, lifecycle, receipt requirements, conformance levels, versioning)

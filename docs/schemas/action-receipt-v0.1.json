@@ -145,9 +145,13 @@
   "allOf": [
     {
       "if": {
+        "required": ["policy"],
         "properties": {
           "policy": {
-            "properties": { "decision": { "const": "require-approval" } }
+            "required": ["decision"],
+            "properties": {
+              "decision": { "const": "require-approval" }
+            }
           }
         }
       },

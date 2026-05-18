@@ -73,6 +73,23 @@ def test_require_approval_decision_without_approval_block_fails(
     )
 
 
+def test_missing_policy_does_not_spuriously_require_approval(minimal_receipt: dict[str, Any]) -> None:
+    """When `policy` is absent entirely, the validator must emit ONE error
+    (policy is required) — not two (policy required AND approval required).
+    This guards against the JSON Schema vacuous-truth bug where `if {properties: {policy: ...}}`
+    evaluates to true when policy isn't present, spuriously triggering the
+    `then: {required: [approval]}` branch."""
+    bad = copy.deepcopy(minimal_receipt)
+    del bad["policy"]
+    errors = validate_receipt(bad)
+    # Must have exactly one error about policy being missing
+    assert any("policy" in e and "required" in e for e in errors), errors
+    # Must NOT spuriously complain about approval being missing
+    assert not any("approval" in e for e in errors), (
+        f"Validator spuriously required `approval` when `policy` was missing. Errors: {errors}"
+    )
+
+
 def test_additional_properties_at_root_are_rejected(minimal_receipt: dict[str, Any]) -> None:
     """The schema uses `additionalProperties: false` at the root so unknown top-level
     keys can't sneak past the validator. This prevents vendor extensions from being

@@ -42,13 +42,13 @@ hatch run lint:fmt --check
 hatch run lint:type
 ```
 
-## Reporting bad mappings or test errors
+## Reporting issues
 
-If you ran the conformance suite against a vendor and the result looks wrong, please open an issue with:
+For schema or validator bugs in this release (v0.x), please open an issue with:
 
-- Vendor + version
-- The exact `agentboundary` command you ran
-- Expected vs actual output
+- The `agentboundary` version (`pip show agentboundary`)
+- A minimal Action Receipt JSON that reproduces the bug
+- Expected vs actual validator output
 - Your environment (`uname -a`, `python --version`)
 
-If you maintain a vendor product and disagree with a conformance mapping, please open an issue tagged `conformance-mapping-dispute`. We respond within 7 days. We will publish a correction if the mapping is wrong, or add a note if it depends on configuration we missed.
+The CLI conformance runner and vendor-comparison mappings ship in a later release. Once they're available, this section will describe how to report bad mappings and how vendor maintainers can open `conformance-mapping-dispute` issues; for now those processes do not yet exist.

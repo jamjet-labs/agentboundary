@@ -1,7 +1,8 @@
 """AgentBoundary — open spec and conformance suite for AI action control.
 
-This is the v0.0.1 package skeleton; full public API is added in subsequent
-work tracked in the plan series at jamjet/docs/superpowers/plans/.
+v0.0.1 ships the Action Receipt schema and validator. The CLI runner,
+conformance test suite, and comparative report against major vendors are
+on the project roadmap.
 """
 
 __version__ = "0.0.1"

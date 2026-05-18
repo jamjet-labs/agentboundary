@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install hatch
+        run: pip install --upgrade pip hatch
+      - name: Run tests
+        run: hatch test
+
+  lint:
+    name: lint + types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install hatch
+        run: pip install --upgrade pip hatch
+      - name: Ruff (style + format check)
+        run: |
+          hatch run lint:style
+          hatch run lint:fmt --check
+      - name: Mypy (strict types)
+        run: hatch run lint:type
+
+  build:
+    name: build wheel + sdist
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install hatch
+        run: pip install --upgrade pip hatch
+      - name: Build
+        run: hatch build
+      - name: Verify wheel contents include the schema
+        run: |
+          python -c "
+          import zipfile, sys
+          import glob
+          wheel = glob.glob('dist/*.whl')[0]
+          with zipfile.ZipFile(wheel) as z:
+              names = z.namelist()
+          required = ['agentboundary/_data/action-receipt-v0.1.json',
+                      'agentboundary/_data/examples/github-merge.json',
+                      'agentboundary/_data/examples/spring-service-mutation.json',
+                      'agentboundary/_data/examples/stripe-refund.json']
+          missing = [r for r in required if r not in names]
+          if missing:
+              print('MISSING from wheel:', missing); sys.exit(1)
+          print('wheel verified:', wheel)
+          "

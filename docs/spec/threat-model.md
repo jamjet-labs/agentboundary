@@ -133,4 +133,13 @@ Each threat is rated by its conformance-level coverage. Level 4 implementations 
 
 ## 4. Out of scope
 
-_Drafted in Task 9._
+The following are explicitly NOT defended by AgentBoundary v0.1:
+
+- **LLM jailbreaks** — if an LLM is tricked into deciding to perform an Action that policy would allow, the receipt accurately records what happened. AgentBoundary's promise is "the Action was within policy" — not "the Action was wise." Defense against jailbreaks belongs to the agent runtime, not the receipt format.
+- **Prompt injection that produces policy-permitted Actions** — same logic. If an attacker can craft input that leads the agent to take a policy-permitted but undesirable Action, the receipt is accurate; the policy was just too permissive.
+- **Side effects outside the receipt path** — if an agent calls a tool that isn't governed (no policy attached), no receipt is emitted. Out-of-scope tools are out-of-scope evidence. Operators are responsible for ensuring every controlled capability is policy-governed.
+- **Receipt-store availability** — AgentBoundary doesn't prescribe storage durability, replication, or backup. Operators choose; the spec only requires receipts be retained long enough to be verifiable.
+- **Approver identity verification** — the spec assumes `approval.approver.id` is meaningful within the operator's identity system. How that identity is authenticated (SSO, MFA, etc.) is out of scope.
+- **Cross-Action correlation** — v0.1 receipts stand alone. Correlation across receipts (e.g., "all refunds approved by approver X in the last 30 days") is the consumer's responsibility. v0.2 may add OPTIONAL correlation fields.
+
+If you operate an agent runtime and any of these scope gaps matter for your compliance posture, layer additional controls on top of AgentBoundary rather than depending on it alone.

@@ -15,6 +15,13 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
 from agentboundary._schema import load_action_receipt_schema
+from agentboundary.conformance import ConformanceCheck, check_conformance
+from agentboundary.runtime import (
+    Implementation,
+    ReferenceImplementation,
+    RuntimeOutcome,
+)
+from agentboundary.scenarios import Scenario, load_scenario, load_scenarios_dir
 from agentboundary.validator import validate_receipt
 
 try:
@@ -23,7 +30,15 @@ except PackageNotFoundError:  # editable/source tree before install
     __version__ = "0.0.0+unknown"
 
 __all__ = [
+    "ConformanceCheck",
+    "Implementation",
+    "ReferenceImplementation",
+    "RuntimeOutcome",
+    "Scenario",
     "__version__",
+    "check_conformance",
     "load_action_receipt_schema",
+    "load_scenario",
+    "load_scenarios_dir",
     "validate_receipt",
 ]

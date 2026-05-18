@@ -57,6 +57,8 @@ packages = ["src/agentboundary"]
 "docs/receipts/github-merge.json" = "agentboundary/_data/examples/github-merge.json"
 "docs/receipts/spring-service-mutation.json" = "agentboundary/_data/examples/spring-service-mutation.json"
 "docs/receipts/stripe-refund.json" = "agentboundary/_data/examples/stripe-refund.json"
+"scenarios" = "agentboundary/_data/scenarios"
+"src/agentboundary/scenarios/_meta-schema.json" = "agentboundary/scenarios/_meta-schema.json"
 
 [tool.hatch.envs.default]
 dependencies = [

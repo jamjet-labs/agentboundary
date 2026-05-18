@@ -25,3 +25,11 @@ def test_load_action_receipt_schema_is_importable_from_top_level() -> None:
     from agentboundary import load_action_receipt_schema
 
     assert callable(load_action_receipt_schema)
+
+
+def test_w3_public_surface_importable() -> None:
+    import agentboundary
+
+    assert agentboundary.ReferenceImplementation is not None
+    assert agentboundary.check_conformance is not None
+    assert agentboundary.load_scenario is not None

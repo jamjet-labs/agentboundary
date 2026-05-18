@@ -1,6 +1,6 @@
 {
   "name": "agentboundary",
-  "version": "0.0.3-dev",
+  "version": "0.0.3",
   "description": "AgentBoundary conformance suite runner (Node wrapper that dispatches to the Python CLI via uvx / pipx / python3).",
   "license": "Apache-2.0",
   "homepage": "https://agentboundary.jamjet.dev",

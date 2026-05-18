@@ -57,6 +57,12 @@ packages = ["src/agentboundary"]
 dependencies = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
+    "build>=1.0",
+]
+
+[tool.hatch.envs.hatch-test]
+extra-dependencies = [
+    "build>=1.0",
 ]
 
 [tool.hatch.envs.default.scripts]
@@ -91,4 +97,7 @@ warn_unreachable = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v"
+addopts = "-v -m 'not slow'"
+markers = [
+    "slow: tests that build/install the wheel; opt-in via `hatch test -m slow`",
+]

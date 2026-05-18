@@ -11,10 +11,16 @@ Top-level public API:
     >>> schema = load_action_receipt_schema()
 """
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 from agentboundary._schema import load_action_receipt_schema
 from agentboundary.validator import validate_receipt
 
-__version__ = "0.0.2"
+try:
+    __version__ = _pkg_version("agentboundary")
+except PackageNotFoundError:  # editable/source tree before install
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "__version__",

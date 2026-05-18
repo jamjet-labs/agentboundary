@@ -1,5 +1,7 @@
 """Smoke test that the package imports and exposes a version."""
 
+from importlib.metadata import version as _pkg_version
+
 import agentboundary
 
 
@@ -10,7 +12,7 @@ def test_package_imports() -> None:
 def test_package_exposes_version() -> None:
     assert hasattr(agentboundary, "__version__")
     assert isinstance(agentboundary.__version__, str)
-    assert agentboundary.__version__ == "0.0.2"
+    assert agentboundary.__version__ == _pkg_version("agentboundary")
 
 
 def test_validate_receipt_is_importable_from_top_level() -> None:

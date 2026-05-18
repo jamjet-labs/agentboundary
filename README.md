@@ -6,10 +6,13 @@
 
 ## What's here today
 
-- `docs/schemas/action-receipt-v0.1.json` — the Action Receipt JSON Schema (the spec authority)
-- `docs/receipts/` — three worked example receipts (GitHub merge, Spring service mutation, Stripe refund)
-- `src/agentboundary/` — Python package skeleton + validator
-- `tests/` — pytest suite
+- [`docs/spec/v0.1.md`](docs/spec/v0.1.md) — the v0.1 specification (definitions, lifecycle, receipt requirements, conformance levels, versioning)
+- [`docs/spec/threat-model.md`](docs/spec/threat-model.md) — adversaries, threats, mitigations, and conformance-level mapping
+- [`docs/spec/owasp-mapping.md`](docs/spec/owasp-mapping.md) — OWASP LLM Top 10 risks mapped to AgentBoundary conformance levels
+- [`docs/schemas/action-receipt-v0.1.json`](docs/schemas/action-receipt-v0.1.json) — Action Receipt JSON Schema (normative source for receipt syntax)
+- [`docs/receipts/`](docs/receipts/README.md) — three worked example receipts (GitHub merge, Spring service mutation, Stripe refund) — see the [reader's guide](docs/receipts/README.md)
+- [`src/agentboundary/`](src/agentboundary/) — Python reference implementation (`validate_receipt`, schema loader)
+- [`tests/`](tests/) — pytest suite
 
 ## Run the tests
 

@@ -10,7 +10,7 @@ between "passed Level 4" and "Level 4 was not checked".
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
 from agentboundary.validator import iter_schema_errors, validate_receipt
@@ -90,7 +90,7 @@ def _extract_missing_property(err: Any) -> str | None:
     end = msg.find("'", start + 1)
     if end < 0:
         return None
-    return msg[start + 1 : end]
+    return cast(str, msg[start + 1 : end])
 
 
 def check_conformance(

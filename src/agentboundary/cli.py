@@ -22,7 +22,7 @@ def main() -> None:
     """AgentBoundary v0.1 conformance runner.
 
     Run a single scenario:
-        agentboundary run examples/github-merge.yaml
+        agentboundary run scenarios/01-merge-allow.yaml
 
     Run a directory of scenarios:
         agentboundary run scenarios/

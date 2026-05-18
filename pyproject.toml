@@ -82,6 +82,9 @@ dependencies = [
     "ruff>=0.4",
     "mypy>=1.10",
     "types-jsonschema>=4.21",
+    "click>=8.1",
+    "PyYAML>=6.0",
+    "types-PyYAML",
 ]
 
 [tool.hatch.envs.lint.scripts]

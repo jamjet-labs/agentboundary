@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from jsonschema import Draft202012Validator
@@ -17,7 +17,10 @@ _META_SCHEMA_FILENAME = "_meta-schema.json"
 def _load_meta_schema() -> dict[str, Any]:
     """Read the bundled scenario meta-schema as JSON."""
     pkg = resources.files("agentboundary.scenarios")
-    return json.loads(pkg.joinpath(_META_SCHEMA_FILENAME).read_text("utf-8"))
+    return cast(
+        dict[str, Any],
+        json.loads(pkg.joinpath(_META_SCHEMA_FILENAME).read_text("utf-8")),
+    )
 
 
 _META_VALIDATOR = Draft202012Validator(

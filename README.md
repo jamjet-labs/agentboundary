@@ -2,14 +2,14 @@
 
 > An open spec and conformance suite for proving AI-initiated production actions.
 
-**Status:** v0.0.1 — pre-launch. The full v0.1 specification, runner, and conformance test suite are under active development. This repo will be public at the W4 launch (planned 2026-06-15). Until then, the README intentionally does not pitch the project — the v4 operating memo at `jamjet-business/PM-MEMO-2026-05-18-v4.md` describes the launch surface.
+**Status:** v0.0.3 — pre-launch. The full v0.1 specification, runner, and conformance test suite are under active development. This repo will be public at the W4 launch (planned 2026-06-15). Until then, the README intentionally does not pitch the project — the v4 operating memo at `jamjet-business/PM-MEMO-2026-05-18-v4.md` describes the launch surface.
 
 ## Run the conformance suite (60 seconds, no signup)
 
 ```bash
-npx agentboundary run examples/github-merge.yaml
+npx agentboundary run scenarios/01-merge-allow.yaml
 # or
-uvx agentboundary run examples/github-merge.yaml
+uvx agentboundary run scenarios/01-merge-allow.yaml
 ```
 
 Run all 10 scenarios at once:
@@ -39,9 +39,9 @@ hatch test
 
 ## Roadmap (this repo, next 12 weeks)
 
-- W1 (this plan): schema + worked examples + validator
-- W2: full spec text in `docs/spec/v0.1.md` + threat model + OWASP mapping
-- W3: `agentboundary` CLI runner + first 10 conformance tests
+- W1 (done): schema + worked examples + validator
+- W2 (done): full spec text in `docs/spec/v0.1.md` + threat model + OWASP mapping
+- W3 (done): `agentboundary` CLI runner + first 10 conformance tests
 - W4: public launch
 - W5-W12: reference implementation + comparative runs vs Microsoft AGT, Statis, Cloudflare HITL, LangSmith Gateway, Anthropic Managed Agents
 

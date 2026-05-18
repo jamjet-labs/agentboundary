@@ -24,7 +24,7 @@ repos:
     hooks:
       - id: dco-signoff
         name: enforce DCO sign-off
-        entry: bash -c 'msg=$(git log -1 --pretty=%B); if ! echo "$msg" | grep -q "^Signed-off-by:"; then echo "Commit message missing Signed-off-by line. Use git commit -s."; exit 1; fi'
+        entry: bash -c 'if ! grep -q "^Signed-off-by:" "$1"; then echo "Commit message missing Signed-off-by line. Use git commit -s."; exit 1; fi' --
         language: system
         stages: [commit-msg]
         always_run: true

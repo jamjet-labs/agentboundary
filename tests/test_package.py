@@ -10,7 +10,7 @@ def test_package_imports() -> None:
 def test_package_exposes_version() -> None:
     assert hasattr(agentboundary, "__version__")
     assert isinstance(agentboundary.__version__, str)
-    assert agentboundary.__version__ == "0.0.1"
+    assert agentboundary.__version__ == "0.0.2"
 
 
 def test_validate_receipt_is_importable_from_top_level() -> None:

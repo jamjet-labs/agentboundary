@@ -68,12 +68,52 @@ jobs:
           required = ['agentboundary/_data/action-receipt-v0.1.json',
                       'agentboundary/_data/examples/github-merge.json',
                       'agentboundary/_data/examples/spring-service-mutation.json',
-                      'agentboundary/_data/examples/stripe-refund.json']
+                      'agentboundary/_data/examples/stripe-refund.json',
+                      'agentboundary/_data/scenarios/01-merge-allow.yaml',
+                      'agentboundary/_data/scenarios/10-claim-level-3-without-hash.yaml',
+                      'agentboundary/scenarios/_meta-schema.json']
           missing = [r for r in required if r not in names]
           if missing:
               print('MISSING from wheel:', missing); sys.exit(1)
           print('wheel verified:', wheel)
           "
+
+  cli-smoke:
+    name: cli-smoke (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install hatch
+        run: pip install --upgrade pip hatch
+      - name: Run slow CLI subprocess tests
+        run: hatch test -m slow -v
+
+  npm-dispatch:
+    name: npm-dispatch (${{ matrix.os }}, node${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node-version: [18, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Run npm wrapper tests
+        working-directory: npm
+        run: node --test test/*.test.js
 
   wheel-install:
     name: wheel install + schema load (slow tests)

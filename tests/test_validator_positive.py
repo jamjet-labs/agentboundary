@@ -31,3 +31,9 @@ def test_github_merge_example_validates(examples_dir: Path) -> None:
     receipt = json.loads((examples_dir / "github-merge.json").read_text())
     errors = validate_receipt(receipt)
     assert errors == [], f"github-merge.json should validate. Errors: {errors}"
+
+
+def test_spring_service_mutation_example_validates(examples_dir: Path) -> None:
+    receipt = json.loads((examples_dir / "spring-service-mutation.json").read_text())
+    errors = validate_receipt(receipt)
+    assert errors == [], f"spring-service-mutation.json should validate. Errors: {errors}"

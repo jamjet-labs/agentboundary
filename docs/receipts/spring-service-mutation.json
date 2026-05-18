@@ -1,0 +1,47 @@
+{
+  "version": "agentboundary/v0.1",
+  "receipt_id": "0192c8d1-3a4b-7c5d-8e6f-9a0b1c2d3e4f",
+  "issued_at": "2026-06-15T15:11:42Z",
+  "actor": {
+    "type": "agent",
+    "id": "agent:internal-support-bot:run/4521",
+    "display_name": "Support copilot — claim update flow"
+  },
+  "agent": {
+    "framework": "spring-ai",
+    "framework_version": "1.0.3",
+    "model": "gpt-5.5",
+    "model_version": "20260301"
+  },
+  "tool": {
+    "name": "claims-service",
+    "version": "3.14.0",
+    "capability": "spring.service.mutation"
+  },
+  "target": {
+    "system": "claims.internal.acme-insurance.com",
+    "environment": "prod",
+    "resource_id": "claim/CL-2026-00078321"
+  },
+  "arguments_hash": "8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a90",
+  "policy": {
+    "name": "acme.claims.mutations.require-second-approver",
+    "version": "5",
+    "decision": "require-approval"
+  },
+  "approval": {
+    "approver": {
+      "id": "u:claim-supervisor:9921",
+      "display_name": "Priya Ramaswamy",
+      "role": "claims-supervisor"
+    },
+    "approved_at": "2026-06-15T15:10:55Z",
+    "context": "Claimant verified by phone. Settlement amount within $25K tier."
+  },
+  "execution": {
+    "status": "success",
+    "completed_at": "2026-06-15T15:11:43Z",
+    "result_ref": "claim/CL-2026-00078321/rev/12"
+  },
+  "receipt_hash": "ee11223344556677889900aabbccddeeff11223344556677889900aabbccddeb"
+}

@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentboundary.jamjet.dev/scenarios/_meta-schema.json",
+  "title": "AgentBoundary scenario file",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "setup", "action", "expect"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "version", "rule", "capabilities"],
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "rule": {
+                "type": "string",
+                "enum": ["allow", "deny", "require-approval", "escalate"]
+              },
+              "capabilities": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "limit": {
+                "type": "object",
+                "required": ["field", "max"],
+                "properties": {
+                  "field": { "type": "string" },
+                  "max": { "type": "number" }
+                }
+              },
+              "approvers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "type"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "type": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "approvals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["capability", "approver", "approved_at"],
+            "properties": {
+              "capability": { "type": "string" },
+              "approver": {
+                "type": "object",
+                "required": ["type", "id"],
+                "properties": {
+                  "type": { "type": "string" },
+                  "id": { "type": "string" }
+                }
+              },
+              "approved_at": { "type": "string", "format": "date-time" },
+              "context": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["actor", "agent", "tool", "target", "arguments"],
+      "additionalProperties": false,
+      "properties": {
+        "actor": { "type": "object" },
+        "agent": { "type": "object" },
+        "tool": { "type": "object" },
+        "target": { "type": "object" },
+        "arguments": { "type": "object" },
+        "inject": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["op"],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "omit_field",
+                  "mutate_field",
+                  "tamper_arguments_hash",
+                  "tamper_receipt_hash"
+                ]
+              },
+              "path": { "type": "string" },
+              "value": {},
+              "after": { "type": "string", "enum": ["emit"] }
+            }
+          }
+        }
+      }
+    },
+    "expect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["allow", "deny", "require-approval", "escalate"]
+        },
+        "conformance_level": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "receipt_must_validate": { "type": "boolean" },
+        "failures_must_include": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "equals"],
+            "properties": {
+              "field": { "type": "string" },
+              "equals": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

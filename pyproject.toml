@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentboundary"
+version = "0.0.1"
+description = "Open spec and conformance suite for proving AI-initiated production actions"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "JamJet Labs", email = "sunil@jamjet.dev" },
+]
+keywords = ["agent", "agent-action-control", "action-receipts", "agentboundary", "ai-safety", "ai-governance"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "jsonschema>=4.21,<5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/jamjet-labs/agentboundary"
+Repository = "https://github.com/jamjet-labs/agentboundary"
+Issues = "https://github.com/jamjet-labs/agentboundary/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentboundary"]
+
+# Include the schema + example receipts in the wheel so installing the package
+# gives you the spec authority without a second download.
+[tool.hatch.build.targets.wheel.force-include]
+"docs/schemas/action-receipt-v0.1.json" = "agentboundary/_data/action-receipt-v0.1.json"
+"docs/receipts/github-merge.json" = "agentboundary/_data/examples/github-merge.json"
+"docs/receipts/spring-service-mutation.json" = "agentboundary/_data/examples/spring-service-mutation.json"
+"docs/receipts/stripe-refund.json" = "agentboundary/_data/examples/stripe-refund.json"
+
+[tool.hatch.envs.default]
+dependencies = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+cov = "pytest --cov=agentboundary --cov-report=term-missing {args:tests}"
+
+[tool.hatch.envs.lint]
+detached = true
+dependencies = [
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[tool.hatch.envs.lint.scripts]
+style = "ruff check {args:src tests}"
+fmt = "ruff format {args:src tests}"
+type = "mypy --strict src/agentboundary"
+all = ["style", "fmt --check", "type"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"

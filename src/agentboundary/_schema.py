@@ -18,9 +18,7 @@ from typing import Any
 
 _BUNDLED_RESOURCE = "agentboundary._data"
 _BUNDLED_FILENAME = "action-receipt-v0.1.json"
-_REPO_RELATIVE_PATH = (
-    Path(__file__).parent.parent.parent / "docs" / "schemas" / _BUNDLED_FILENAME
-)
+_REPO_RELATIVE_PATH = Path(__file__).parent.parent.parent / "docs" / "schemas" / _BUNDLED_FILENAME
 
 
 @lru_cache(maxsize=1)

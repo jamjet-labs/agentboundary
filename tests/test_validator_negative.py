@@ -5,8 +5,6 @@ assert against the message."""
 import copy
 from typing import Any
 
-import pytest
-
 from agentboundary.validator import validate_receipt
 
 

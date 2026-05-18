@@ -24,8 +24,7 @@ def validate_receipt(receipt: dict[str, Any]) -> list[str]:
     schema = load_action_receipt_schema()
     validator = Draft202012Validator(schema)
     return [
-        _format_error(err)
-        for err in sorted(validator.iter_errors(receipt), key=_error_sort_key)
+        _format_error(err) for err in sorted(validator.iter_errors(receipt), key=_error_sort_key)
     ]
 
 

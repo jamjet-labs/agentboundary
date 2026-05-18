@@ -1,0 +1,21 @@
+{
+  "name": "agentboundary",
+  "version": "0.0.3-dev",
+  "description": "AgentBoundary conformance suite runner (Node wrapper that dispatches to the Python CLI via uvx / pipx / python3).",
+  "license": "Apache-2.0",
+  "homepage": "https://agentboundary.jamjet.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamjet-labs/agentboundary.git"
+  },
+  "bin": {
+    "agentboundary": "./bin/agentboundary.js"
+  },
+  "files": ["bin", "README.md"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

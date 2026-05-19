@@ -37,8 +37,9 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
+        # No cache: agentboundary uses hatch, not uv, so there is no uv.lock
+        # for the cache key to glob against. Tag publishes run once;
+        # cache savings are negligible.
 
       - name: Set up Python 3.12
         run: uv python install 3.12

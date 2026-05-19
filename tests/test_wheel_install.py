@@ -66,7 +66,7 @@ def test_installed_wheel_loads_schema_from_bundled_resource(tmp_path: Path) -> N
     )
 
     output = json.loads(result.stdout)
-    assert output["id"] == "https://agentboundary.dev/schemas/action-receipt-v0.1.json"
+    assert output["id"] == "https://agentboundary.jamjet.dev/schemas/action-receipt-v0.1.json"
     assert output["title"] == "AgentBoundary Action Receipt v0.1"
 
 

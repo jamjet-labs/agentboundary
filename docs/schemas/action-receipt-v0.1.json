@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agentboundary.dev/schemas/action-receipt-v0.1.json",
+  "$id": "https://agentboundary.jamjet.dev/schemas/action-receipt-v0.1.json",
   "title": "AgentBoundary Action Receipt v0.1",
   "description": "Portable, tamper-evident proof of an AI-initiated production action. Emitted at the production action boundary; verifiable by any party (auditor, regulator, insurer) without trusting the agent framework or model provider.",
   "type": "object",

@@ -11,7 +11,7 @@ def test_load_action_receipt_schema_returns_dict() -> None:
 
 def test_schema_has_expected_id() -> None:
     schema = load_action_receipt_schema()
-    assert schema["$id"] == "https://agentboundary.dev/schemas/action-receipt-v0.1.json"
+    assert schema["$id"] == "https://agentboundary.jamjet.dev/schemas/action-receipt-v0.1.json"
 
 
 def test_schema_has_expected_title() -> None:

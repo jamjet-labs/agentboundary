@@ -5,7 +5,7 @@
   "actor": {
     "type": "agent",
     "id": "agent:internal-support-bot:run/4521",
-    "display_name": "Support copilot — claim update flow"
+    "display_name": "Support copilot \u2014 claim update flow"
   },
   "agent": {
     "framework": "spring-ai",
@@ -43,5 +43,5 @@
     "completed_at": "2026-06-15T15:11:43Z",
     "result_ref": "claim/CL-2026-00078321/rev/12"
   },
-  "receipt_hash": "d9a85a384d18dfca317e73f6ad9dab10ed0aa0c81f20491d67b229ae742a8f39"
+  "receipt_hash": "38c63eba91a5dfda8c109a91dc301697e963b6a1b8a4ad7874b734a953ea36f3"
 }

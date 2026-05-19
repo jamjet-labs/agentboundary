@@ -5,7 +5,7 @@
   "actor": {
     "type": "agent",
     "id": "agent:claude-code:session/789abc",
-    "display_name": "Claude Code (Sunil's session)"
+    "display_name": "Claude Code"
   },
   "agent": {
     "framework": "claude-code",
@@ -34,5 +34,5 @@
     "completed_at": "2026-06-15T14:23:09Z",
     "result_ref": "sha:b1c2d3e4f5a6"
   },
-  "receipt_hash": "72d5bf6a8ab8bcf76d7655da77df1264d8c903ff4fb27990d6d79a884458a4c8"
+  "receipt_hash": "4d905d5dbc9faa4dafcb2155da9c4d5e1052cb23c680f3754d4ebc5800a4bae7"
 }

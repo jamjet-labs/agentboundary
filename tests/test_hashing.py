@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import pytest
+
 from agentboundary.hashing import (
     canonical_json,
     compute_arguments_hash,
@@ -71,3 +76,18 @@ class TestComputeReceiptHash:
         }
         expected = sha256_hex(canonical_json(receipt))
         assert compute_receipt_hash(receipt) == expected
+
+
+@pytest.mark.parametrize(
+    "slug",
+    ["github-merge", "spring-service-mutation", "stripe-refund"],
+)
+def test_worked_example_receipt_hash_is_canonical(slug: str) -> None:
+    # Worked examples ship in the wheel as evidence the spec is self-consistent.
+    # Anyone who downloads one and recomputes the canonical hash MUST get a match,
+    # otherwise the L3 verifiability claim in spec §5.1 is false on day one.
+    path = Path(__file__).parent.parent / "docs" / "receipts" / f"{slug}.json"
+    receipt = json.loads(path.read_text())
+    assert receipt["receipt_hash"] == compute_receipt_hash(receipt), (
+        f"{slug}.json receipt_hash does not match canonical SHA-256 of its body"
+    )

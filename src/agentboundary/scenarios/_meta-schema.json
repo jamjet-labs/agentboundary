@@ -47,10 +47,16 @@
                     "type": { "type": "string" }
                   }
                 }
-              }
+              },
+              "approval_max_age_seconds": { "type": "number", "minimum": 0 }
             }
           }
         },
+        "prior_receipt_ids": {
+          "type": "array",
+          "items": { "type": "string", "format": "uuid" }
+        },
+        "seed_receipt_id": { "type": "string", "format": "uuid" },
         "approvals": {
           "type": "array",
           "items": {
@@ -100,7 +106,8 @@
               },
               "path": { "type": "string" },
               "value": {},
-              "after": { "type": "string", "enum": ["emit"] }
+              "after": { "type": "string", "enum": ["emit"] },
+              "recompute_hash": { "type": "boolean" }
             }
           }
         }

@@ -1,15 +1,17 @@
 """Spec §5 conformance level checks.
 
-Each level builds on the previous. Level 4 is intentionally not implemented
-in W3 (it requires the adversarial lifecycle scenarios that ship in W6);
-calling ``check_conformance(receipt, level=4)`` returns an info-severity
-``LEVEL_4_NOT_IMPLEMENTED`` marker so callers can tell the difference
-between "passed Level 4" and "Level 4 was not checked".
+Each level builds on the previous. Level 4 (Tamper-Evident) examines the
+receipt against verifier-supplied context: the matching policy definition
+(for stale-approval and unauthorized-approver checks), and the set of
+receipt_ids already observed (for replay detection). When that context is
+missing, Level 4 emits info-severity ``LEVEL_4_SKIPPED_*`` markers so
+callers can tell "passed Level 4" from "Level 4 was not checked."
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Literal, cast
 
 from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
@@ -98,6 +100,9 @@ def check_conformance(
     level: int,
     *,
     arguments: dict[str, Any] | None = None,
+    policy_full: dict[str, Any] | None = None,
+    prior_receipt_ids: set[str] | None = None,
+    policy_store: set[tuple[str, str]] | None = None,
 ) -> list[ConformanceCheck]:
     """Run all conformance checks up to ``level`` against ``receipt``.
 
@@ -105,6 +110,20 @@ def check_conformance(
     ``arguments_hash`` was computed over. If omitted, the Level 3
     arguments-hash-mismatch check is skipped with a ``SKIPPED_NO_ARGUMENTS``
     info marker so callers can tell the check did not run.
+
+    ``policy_full`` is the matching policy definition the receipt was
+    decided against, with optional ``approvers`` and
+    ``approval_max_age_seconds`` keys. Required for Level 4 stale-approval
+    and unauthorized-approver checks; absence emits
+    ``LEVEL_4_SKIPPED_NO_POLICY_CONTEXT``.
+
+    ``prior_receipt_ids`` is the set of receipt_ids the verifier has
+    already observed. Required for Level 4 replay detection; absence emits
+    ``LEVEL_4_SKIPPED_NO_PRIOR_RECEIPTS``.
+
+    ``policy_store`` is the set of ``(policy.name, policy.version)`` tuples
+    the verifier accepts as valid. Required for Level 4 policy-downgrade
+    detection; absence emits ``LEVEL_4_SKIPPED_NO_POLICY_STORE``.
     """
     if level < 1 or level > 4:
         raise ValueError(f"level must be in 1..4, got {level}")
@@ -252,18 +271,182 @@ def check_conformance(
                     )
                 )
 
-    # 5. Level 4 — Tamper-Evident (W3 stub)
+    # 5. Level 4 — Tamper-Evident
     if level >= 4:
-        results.append(
-            ConformanceCheck(
-                level=4,
-                code="LEVEL_4_NOT_IMPLEMENTED",
-                severity="info",
-                message=(
-                    "Level 4 adversarial checks are W6 work; "
-                    "this result reports Level 3 conformance only"
-                ),
+        results.extend(
+            _level_4_checks(
+                receipt,
+                policy_full=policy_full,
+                prior_receipt_ids=prior_receipt_ids,
+                policy_store=policy_store,
             )
         )
 
     return sorted(results)
+
+
+def _level_4_checks(
+    receipt: dict[str, Any],
+    *,
+    policy_full: dict[str, Any] | None,
+    prior_receipt_ids: set[str] | None,
+    policy_store: set[tuple[str, str]] | None,
+) -> list[ConformanceCheck]:
+    """Run Level 4 (Tamper-Evident) checks.
+
+    Each check is independently optional based on which context the verifier
+    supplied. Missing context produces an info-severity SKIPPED marker so the
+    caller can tell which checks ran.
+    """
+    out: list[ConformanceCheck] = []
+
+    # Timeline: execution.completed_at must not precede receipt.issued_at.
+    # Self-contained: needs no verifier context beyond the receipt itself.
+    issued_at = _parse_rfc3339(receipt.get("issued_at"))
+    completed_at_raw = (receipt.get("execution") or {}).get("completed_at")
+    completed_at = _parse_rfc3339(completed_at_raw)
+    if issued_at is not None and completed_at is not None and completed_at < issued_at:
+        out.append(
+            ConformanceCheck(
+                level=4,
+                code="LEVEL_4_COMPLETED_BEFORE_ISSUED",
+                severity="fail",
+                message=(
+                    f"execution.completed_at={completed_at_raw} precedes "
+                    f"issued_at={receipt.get('issued_at')!r}"
+                ),
+                field="execution.completed_at",
+            )
+        )
+
+    # Approval-context checks
+    approval = receipt.get("approval")
+    if policy_full is None:
+        out.append(
+            ConformanceCheck(
+                level=4,
+                code="LEVEL_4_SKIPPED_NO_POLICY_CONTEXT",
+                severity="info",
+                message=(
+                    "policy_full not supplied; "
+                    "LEVEL_4_STALE_APPROVAL and LEVEL_4_UNAUTHORIZED_APPROVER skipped"
+                ),
+            )
+        )
+    elif approval is not None:
+        approved_at = _parse_rfc3339(approval.get("approved_at"))
+        max_age = policy_full.get("approval_max_age_seconds")
+        if (
+            max_age is not None
+            and approved_at is not None
+            and issued_at is not None
+            and (issued_at - approved_at).total_seconds() > float(max_age)
+        ):
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_STALE_APPROVAL",
+                    severity="fail",
+                    message=(
+                        f"approval.approved_at={approval.get('approved_at')!r} is "
+                        f"{(issued_at - approved_at).total_seconds():.0f}s before "
+                        f"issued_at={receipt.get('issued_at')!r}; exceeds "
+                        f"policy.approval_max_age_seconds={max_age}"
+                    ),
+                    field="approval.approved_at",
+                )
+            )
+
+        approvers = policy_full.get("approvers")
+        if isinstance(approvers, list) and approvers:
+            approver_id = (approval.get("approver") or {}).get("id")
+            allowed_ids = {a.get("id") for a in approvers if isinstance(a, dict)}
+            if approver_id is not None and approver_id not in allowed_ids:
+                out.append(
+                    ConformanceCheck(
+                        level=4,
+                        code="LEVEL_4_UNAUTHORIZED_APPROVER",
+                        severity="fail",
+                        message=(
+                            f"approver.id={approver_id!r} is not in policy.approvers "
+                            f"{sorted(i for i in allowed_ids if i is not None)}"
+                        ),
+                        field="approval.approver.id",
+                    )
+                )
+
+    # Policy-downgrade: receipt's (policy.name, policy.version) must be a
+    # tuple the verifier accepts. Spec §5.4 mandates this for L4 to defend
+    # against an agent claiming an older policy version that would have
+    # permitted an action the current policy denies.
+    if policy_store is None:
+        out.append(
+            ConformanceCheck(
+                level=4,
+                code="LEVEL_4_SKIPPED_NO_POLICY_STORE",
+                severity="info",
+                message="policy_store not supplied; LEVEL_4_POLICY_DOWNGRADE skipped",
+            )
+        )
+    else:
+        rp = receipt.get("policy") or {}
+        rkey = (rp.get("name"), rp.get("version"))
+        if rkey[0] is not None and rkey[1] is not None and rkey not in policy_store:
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_POLICY_DOWNGRADE",
+                    severity="fail",
+                    message=(
+                        f"receipt.policy={rkey!r} is not in verifier's policy_store; "
+                        "claimed policy may be a downgrade or fabrication"
+                    ),
+                    field="policy",
+                )
+            )
+
+    # Replay
+    if prior_receipt_ids is None:
+        out.append(
+            ConformanceCheck(
+                level=4,
+                code="LEVEL_4_SKIPPED_NO_PRIOR_RECEIPTS",
+                severity="info",
+                message=(
+                    "prior_receipt_ids not supplied; LEVEL_4_RECEIPT_ID_REPLAY skipped"
+                ),
+            )
+        )
+    else:
+        rid = receipt.get("receipt_id")
+        if rid is not None and rid in prior_receipt_ids:
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_RECEIPT_ID_REPLAY",
+                    severity="fail",
+                    message=f"receipt_id={rid!r} has been observed before",
+                    field="receipt_id",
+                )
+            )
+
+    return out
+
+
+def _parse_rfc3339(value: Any) -> datetime | None:
+    """Parse an RFC 3339 timestamp permissively; return None on failure.
+
+    Returns None for None/non-string inputs so callers can short-circuit
+    cleanly when a schema-required field is absent (the schema check at
+    Level 0 has already flagged that case).
+    """
+    if not isinstance(value, str):
+        return None
+    s = value.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt

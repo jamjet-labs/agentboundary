@@ -14,7 +14,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
+from agentboundary.hashing import (
+    compute_arguments_hash,
+    compute_receipt_hash,
+)
 
 Decision = Literal["allow", "deny", "require-approval", "escalate"]
 
@@ -95,6 +98,7 @@ class ReferenceImplementation(Implementation):
             policy_decision=rule,
             executed=executed,
             approval=approval_for_cap,
+            seed_receipt_id=setup.get("seed_receipt_id"),
         )
 
         for op in action.get("inject", []):
@@ -123,6 +127,7 @@ def _build_receipt(
     policy_decision: str,
     executed: bool,
     approval: dict[str, Any] | None,
+    seed_receipt_id: str | None = None,
 ) -> dict[str, Any]:
     """Assemble an Action Receipt for the given action + policy outcome.
 
@@ -136,7 +141,7 @@ def _build_receipt(
     """
     receipt: dict[str, Any] = {
         "version": "agentboundary/v0.1",
-        "receipt_id": str(uuid.uuid4()),
+        "receipt_id": seed_receipt_id or str(uuid.uuid4()),
         "issued_at": _now_rfc3339(),
         "actor": action["actor"],
         "agent": action["agent"],
@@ -198,13 +203,26 @@ def _apply_inject(receipt: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]
     a tampered hash. The reference implementation honours the inject AFTER
     emitting a fully-formed valid receipt, so each negative scenario isolates
     exactly one failure mode.
+
+    ``path`` for ``omit_field`` / ``mutate_field`` accepts dotted segments
+    (``execution.completed_at``) so scenarios can target nested fields without
+    needing a bespoke op per leaf. Hash tamperers stay specific because they
+    must recompute the digest in a known-bad way.
     """
     kind = op["op"]
     if kind == "omit_field":
-        receipt.pop(op["path"], None)
+        _delete_path(receipt, op["path"])
         return receipt
     if kind == "mutate_field":
-        receipt[op["path"]] = op["value"]
+        _set_path(receipt, op["path"], op["value"])
+        # When the scenario wants to isolate a semantic failure (e.g. a
+        # timeline violation) rather than the L3 hash-mismatch cascade,
+        # ``recompute_hash: true`` re-digests the mutated receipt so it
+        # looks internally consistent. The L4 invariants then catch the
+        # planted lie on its own merits.
+        if op.get("recompute_hash"):
+            receipt.pop("receipt_hash", None)
+            receipt["receipt_hash"] = compute_receipt_hash(receipt)
         return receipt
     if kind == "tamper_arguments_hash":
         # Flip the first hex byte; result is still 64-char hex but no longer
@@ -217,6 +235,39 @@ def _apply_inject(receipt: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]
         receipt["receipt_hash"] = _flip_first_hex_byte(current)
         return receipt
     raise ValueError(f"unknown inject op: {kind}")
+
+
+def _split_path(path: str) -> list[str]:
+    return [p for p in path.split(".") if p]
+
+
+def _delete_path(receipt: dict[str, Any], path: str) -> None:
+    """Delete the leaf at ``path``; no-op if any segment is missing."""
+    parts = _split_path(path)
+    if not parts:
+        return
+    cursor: Any = receipt
+    for seg in parts[:-1]:
+        if not isinstance(cursor, dict) or seg not in cursor:
+            return
+        cursor = cursor[seg]
+    if isinstance(cursor, dict):
+        cursor.pop(parts[-1], None)
+
+
+def _set_path(receipt: dict[str, Any], path: str, value: Any) -> None:
+    """Set the leaf at ``path`` to ``value``, creating intermediate dicts if needed."""
+    parts = _split_path(path)
+    if not parts:
+        return
+    cursor: Any = receipt
+    for seg in parts[:-1]:
+        nxt = cursor.get(seg)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            cursor[seg] = nxt
+        cursor = nxt
+    cursor[parts[-1]] = value
 
 
 def _flip_first_hex_byte(h: str) -> str:

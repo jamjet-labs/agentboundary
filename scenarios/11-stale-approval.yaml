@@ -1,0 +1,38 @@
+name: 11-stale-approval
+description: |
+  Approval is genuine and well-formed, but its approved_at timestamp is
+  older than the policy's approval_max_age_seconds window relative to the
+  receipt's issued_at. Level 4 catches the staleness even though Level 3
+  hashes line up.
+setup:
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+      approval_max_age_seconds: 60
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2024-01-01T00:00:00Z"
+      context: { ticket: ACME-1287 }
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_4_STALE_APPROVAL"]

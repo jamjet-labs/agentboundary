@@ -128,7 +128,34 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
     level = expect.get("conformance_level")
     checks: list[Any] = []
     if level is not None and outcome.receipt is not None:
-        checks = check_conformance(outcome.receipt, level=level, arguments=outcome.arguments)
+        # Level 4 reads the matching policy and the prior-receipt set out of
+        # setup so adversarial context lives next to the action. For L<=3 the
+        # extras are inert.
+        capability = scenario.action.get("tool", {}).get("capability")
+        policy_full = next(
+            (
+                p
+                for p in scenario.setup.get("policies", [])
+                if capability in p.get("capabilities", [])
+            ),
+            None,
+        )
+        prior_receipt_ids = (
+            set(scenario.setup["prior_receipt_ids"])
+            if "prior_receipt_ids" in scenario.setup
+            else None
+        )
+        policy_store = {
+            (p["name"], p["version"]) for p in scenario.setup.get("policies", [])
+        } or None
+        checks = check_conformance(
+            outcome.receipt,
+            level=level,
+            arguments=outcome.arguments,
+            policy_full=policy_full,
+            prior_receipt_ids=prior_receipt_ids,
+            policy_store=policy_store,
+        )
 
     required_codes = set(expect.get("failures_must_include", []))
     actual_fail_codes = {c.code for c in checks if c.severity == "fail"}

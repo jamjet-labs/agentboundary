@@ -124,14 +124,173 @@ class TestLevel3:
         assert "LEVEL_3_RECEIPT_HASH_MISMATCH" in codes
 
 
+@pytest.fixture
+def receipt_with_approval(minimal_l3_receipt: dict) -> dict:
+    """L3-valid receipt with policy.decision=require-approval + approval block."""
+    receipt = deepcopy(minimal_l3_receipt)
+    receipt["policy"] = {"name": "p", "version": "1", "decision": "require-approval"}
+    receipt["approval"] = {
+        "approver": {"id": "user:lead@acme", "role": "maintainer"},
+        "approved_at": "2026-06-15T14:22:30Z",
+    }
+    receipt.pop("receipt_hash", None)
+    receipt["receipt_hash"] = compute_receipt_hash(receipt)
+    return receipt
+
+
 class TestLevel4:
-    def test_l4_returns_not_implemented_info(self, minimal_l3_receipt: dict) -> None:
-        checks = check_conformance(minimal_l3_receipt, level=4, arguments={"x": 1})
-        codes = {(c.code, c.severity) for c in checks}
-        assert ("LEVEL_4_NOT_IMPLEMENTED", "info") in codes
-        # No L4 failures should be reported for a Level 3-valid receipt
+    """W6 — Tamper-Evident lifecycle checks.
+
+    Level 4 introduces context-dependent checks: the receipt is read against
+    its declared policy, the runtime's clock, and the set of receipt_ids the
+    verifier has seen. When that context is missing, the checks emit info
+    markers (LEVEL_4_SKIPPED_*) so callers can tell the difference between
+    "passed Level 4" and "Level 4 was not checked".
+    """
+
+    def test_l4_passes_when_no_adversarial_signals(
+        self, receipt_with_approval: dict
+    ) -> None:
+        policy = {
+            "name": "p",
+            "version": "1",
+            "rule": "require-approval",
+            "approvers": [{"id": "user:lead@acme"}],
+            "approval_max_age_seconds": 3600,
+        }
+        checks = check_conformance(
+            receipt_with_approval,
+            level=4,
+            arguments={"x": 1},
+            policy_full=policy,
+            prior_receipt_ids=set(),
+            policy_store={("p", "1")},
+        )
         l4_fails = [c for c in checks if c.severity == "fail" and c.code.startswith("LEVEL_4_")]
         assert l4_fails == []
+
+    def test_l4_stale_approval(self, receipt_with_approval: dict) -> None:
+        # issued_at=14:23:08, approved_at=14:22:30 → 38s gap.
+        # max_age_seconds=10 → stale.
+        policy = {
+            "name": "p",
+            "version": "1",
+            "rule": "require-approval",
+            "approvers": [{"id": "user:lead@acme"}],
+            "approval_max_age_seconds": 10,
+        }
+        checks = check_conformance(
+            receipt_with_approval,
+            level=4,
+            arguments={"x": 1},
+            policy_full=policy,
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_STALE_APPROVAL" in codes
+
+    def test_l4_unauthorized_approver(self, receipt_with_approval: dict) -> None:
+        policy = {
+            "name": "p",
+            "version": "1",
+            "rule": "require-approval",
+            "approvers": [{"id": "user:other@acme"}],
+            "approval_max_age_seconds": 3600,
+        }
+        checks = check_conformance(
+            receipt_with_approval,
+            level=4,
+            arguments={"x": 1},
+            policy_full=policy,
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_UNAUTHORIZED_APPROVER" in codes
+
+    def test_l4_receipt_id_replay(self, minimal_l3_receipt: dict) -> None:
+        prior = {minimal_l3_receipt["receipt_id"]}
+        checks = check_conformance(
+            minimal_l3_receipt,
+            level=4,
+            arguments={"x": 1},
+            prior_receipt_ids=prior,
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_RECEIPT_ID_REPLAY" in codes
+
+    def test_l4_completed_before_issued(self, minimal_l3_receipt: dict) -> None:
+        receipt = deepcopy(minimal_l3_receipt)
+        receipt["execution"]["completed_at"] = "2026-06-15T14:23:00Z"  # 8s BEFORE issued_at
+        receipt.pop("receipt_hash", None)
+        receipt["receipt_hash"] = compute_receipt_hash(receipt)
+        checks = check_conformance(receipt, level=4, arguments={"x": 1})
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_COMPLETED_BEFORE_ISSUED" in codes
+
+    def test_l4_skipped_no_policy_context(self, receipt_with_approval: dict) -> None:
+        # Without policy_full, stale/unauthorized cannot be evaluated.
+        checks = check_conformance(
+            receipt_with_approval,
+            level=4,
+            arguments={"x": 1},
+            policy_full=None,
+        )
+        codes = {(c.code, c.severity) for c in checks}
+        assert ("LEVEL_4_SKIPPED_NO_POLICY_CONTEXT", "info") in codes
+
+    def test_l4_skipped_no_prior_receipts(self, minimal_l3_receipt: dict) -> None:
+        # Without prior_receipt_ids the replay check cannot run.
+        checks = check_conformance(
+            minimal_l3_receipt,
+            level=4,
+            arguments={"x": 1},
+            prior_receipt_ids=None,
+        )
+        codes = {(c.code, c.severity) for c in checks}
+        assert ("LEVEL_4_SKIPPED_NO_PRIOR_RECEIPTS", "info") in codes
+
+    def test_l4_policy_downgrade(self, minimal_l3_receipt: dict) -> None:
+        # Receipt claims policy (p, 1); verifier only knows (p, 2).
+        store: set[tuple[str, str]] = {("p", "2")}
+        checks = check_conformance(
+            minimal_l3_receipt,
+            level=4,
+            arguments={"x": 1},
+            policy_store=store,
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_POLICY_DOWNGRADE" in codes
+
+    def test_l4_skipped_no_policy_store(self, minimal_l3_receipt: dict) -> None:
+        checks = check_conformance(
+            minimal_l3_receipt,
+            level=4,
+            arguments={"x": 1},
+            policy_store=None,
+        )
+        codes = {(c.code, c.severity) for c in checks}
+        assert ("LEVEL_4_SKIPPED_NO_POLICY_STORE", "info") in codes
+
+    def test_l4_skip_does_not_fire_when_context_supplied(
+        self, receipt_with_approval: dict
+    ) -> None:
+        policy = {
+            "name": "p",
+            "version": "1",
+            "rule": "require-approval",
+            "approvers": [{"id": "user:lead@acme"}],
+            "approval_max_age_seconds": 3600,
+        }
+        checks = check_conformance(
+            receipt_with_approval,
+            level=4,
+            arguments={"x": 1},
+            policy_full=policy,
+            prior_receipt_ids=set(),
+            policy_store={("p", "1")},
+        )
+        codes = {c.code for c in checks}
+        assert "LEVEL_4_SKIPPED_NO_POLICY_CONTEXT" not in codes
+        assert "LEVEL_4_SKIPPED_NO_PRIOR_RECEIPTS" not in codes
+        assert "LEVEL_4_SKIPPED_NO_POLICY_STORE" not in codes
 
 
 class TestInvalidLevel:

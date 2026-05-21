@@ -81,7 +81,10 @@ class TestRunDirectory:
     def test_run_all_scenarios(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["run", "scenarios/"])
         assert result.exit_code == 0
-        # All 10 should be present in the matrix
-        for n in range(1, 11):
+        # Every scenario file should be present in the matrix
+        from pathlib import Path
+
+        total = len(list(Path("scenarios").glob("[0-9]*.yaml")))
+        for n in range(1, total + 1):
             assert f"{n:02d}-" in result.output
-        assert "10 passed · 0 failed" in result.output
+        assert f"{total} passed · 0 failed" in result.output

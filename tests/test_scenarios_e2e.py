@@ -60,7 +60,36 @@ def test_scenario_runs_to_its_declared_expectation(scenario) -> None:
     # Conformance check
     if expect.get("conformance_level") is not None and receipt:
         level = expect["conformance_level"]
-        checks = check_conformance(receipt, level=level, arguments=outcome.arguments)
+        # Level 4 reads the matching policy and prior-receipt set out of setup
+        # so scenarios can declare adversarial context inline. For L<=3 these
+        # extras are ignored by check_conformance.
+        capability = scenario.action.get("tool", {}).get("capability")
+        policy_full = next(
+            (
+                p
+                for p in scenario.setup.get("policies", [])
+                if capability in p.get("capabilities", [])
+            ),
+            None,
+        )
+        prior_receipt_ids: set[str] | None = (
+            set(scenario.setup["prior_receipt_ids"])
+            if "prior_receipt_ids" in scenario.setup
+            else None
+        )
+        # The verifier's policy store is the union of declared policies in
+        # the scenario's setup — everything the scenario considers known-good.
+        policy_store = {
+            (p["name"], p["version"]) for p in scenario.setup.get("policies", [])
+        } or None
+        checks = check_conformance(
+            receipt,
+            level=level,
+            arguments=outcome.arguments,
+            policy_full=policy_full,
+            prior_receipt_ids=prior_receipt_ids,
+            policy_store=policy_store,
+        )
         actual_fails = {c.code for c in checks if c.severity == "fail"}
         for code in expect.get("failures_must_include", []):
             if code == "SCHEMA_INVALID":

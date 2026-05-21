@@ -1,0 +1,37 @@
+name: 12-unauthorized-approver
+description: |
+  Approval is fresh and well-formed, but the approver's id is not in the
+  policy's approvers list. Level 4 catches that a different person — perhaps
+  someone with auth but not the auth FOR THIS POLICY — signed off.
+setup:
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+      approval_max_age_seconds: 3600
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:intern@acme" }
+      approved_at: "2026-06-15T14:22:30Z"
+      context: { ticket: ACME-1287 }
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_4_UNAUTHORIZED_APPROVER"]

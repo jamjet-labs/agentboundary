@@ -1,0 +1,43 @@
+name: 29-valid-chain-passes
+description: |
+  v0.2-alpha receipt with a well-formed prior_receipt link to a receipt
+  the verifier has on file. The Merkle-style chain integrity check finds
+  the prior receipt_id in the verifier's map and the hash matches — no
+  LEVEL_4_BROKEN_CHAIN.
+
+  Demonstrates the within-emitter chain-of-custody primitive: deletion or
+  reordering of receipts in this emitter's stream is detectable because
+  every receipt commits to its predecessor.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+  prior_receipt_hashes:
+    "0192c8d0-1f2a-7c3e-bf2a-aaaaaaaaaaaa": "1111111111111111111111111111111111111111111111111111111111111111"
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+  inject:
+    - { op: mutate_field, path: version, value: "agentboundary/v0.2-alpha" }
+    - op: mutate_field
+      path: prior_receipt
+      value:
+        receipt_id: "0192c8d0-1f2a-7c3e-bf2a-aaaaaaaaaaaa"
+        receipt_hash: "1111111111111111111111111111111111111111111111111111111111111111"
+      recompute_hash: true
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true

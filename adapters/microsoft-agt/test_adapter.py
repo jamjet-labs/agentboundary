@@ -137,6 +137,30 @@ def test_completeness_score_matches_recomputed() -> None:
     assert receipt["completeness_score"] == compute_completeness_score(receipt)
 
 
+def test_prior_entry_id_populates_chain_link() -> None:
+    """When the caller supplies prior_entry_id, the adapter wires the
+    Merkle-style chain link using AGT's native previous_hash."""
+    receipt = agt_entry_to_receipt(
+        _agt_allow_entry(),
+        prior_entry_id="0192c8d0-1f2a-7c3e-bf2a-prior0000001",
+    )
+    assert "prior_receipt" in receipt
+    assert receipt["prior_receipt"]["receipt_id"] == "0192c8d0-1f2a-7c3e-bf2a-prior0000001"
+    assert receipt["prior_receipt"]["receipt_hash"] == "xyz789"  # AGT's previous_hash
+    # Provenance: receipt_hash observed from AGT; receipt_id is inferred
+    # because AGT doesn't record the prior entry_id natively.
+    assert receipt["provenance"]["prior_receipt.receipt_hash"] == "observed"
+    assert receipt["provenance"]["prior_receipt.receipt_id"] == "inferred"
+
+
+def test_no_prior_entry_id_omits_chain_link() -> None:
+    """Default: no chain link emitted (the adapter doesn't speculate)."""
+    receipt = agt_entry_to_receipt(_agt_allow_entry())
+    assert "prior_receipt" not in receipt
+    assert "prior_receipt.receipt_id" not in receipt["provenance"]
+    assert "prior_receipt.receipt_hash" not in receipt["provenance"]
+
+
 def test_approval_event_populates_block() -> None:
     receipt = agt_entry_to_receipt(
         _agt_escalate_entry(),

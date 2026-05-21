@@ -52,6 +52,7 @@ def agt_entry_to_receipt(
     decision_bom: dict[str, Any] | None = None,
     approval_event: dict[str, Any] | None = None,
     schema_version: str = "agentboundary/v0.2-alpha",
+    prior_entry_id: str | None = None,
 ) -> dict[str, Any]:
     """Translate one AGT AuditEntry into an AgentBoundary receipt.
 
@@ -65,6 +66,13 @@ def agt_entry_to_receipt(
     verifier can see exactly which fields the adapter synthesized vs
     pulled from AGT directly. Pass ``"agentboundary/v0.1"`` to suppress
     the provenance fields.
+
+    ``prior_entry_id`` is the AGT entry_id of the immediately preceding
+    audit entry. When supplied alongside the entry's ``previous_hash``
+    field, the adapter populates AgentBoundary's ``prior_receipt`` link
+    so the Merkle-style chain check works. AGT's audit log records
+    ``previous_hash`` natively but does NOT record the prior entry_id;
+    the caller (or a chain-walking driver) supplies it.
     """
     receipt_id = entry["entry_id"]
     issued_at = entry["timestamp"]
@@ -96,8 +104,22 @@ def agt_entry_to_receipt(
 
     receipt["execution"] = _build_execution_block(entry, outcome)
 
+    # Chain link: AGT carries previous_hash natively but not the prior
+    # entry_id. When the caller supplies prior_entry_id, the adapter
+    # builds the v0.2-alpha prior_receipt block.
+    prior_hash = entry.get("previous_hash")
+    if (
+        schema_version == "agentboundary/v0.2-alpha"
+        and prior_entry_id
+        and isinstance(prior_hash, str)
+    ):
+        receipt["prior_receipt"] = {
+            "receipt_id": prior_entry_id,
+            "receipt_hash": prior_hash,
+        }
+
     if schema_version == "agentboundary/v0.2-alpha":
-        receipt["provenance"] = _build_provenance(entry, approval_event)
+        receipt["provenance"] = _build_provenance(entry, approval_event, prior_entry_id)
         receipt["completeness_score"] = compute_completeness_score(receipt)
 
     receipt["receipt_hash"] = compute_receipt_hash(receipt)
@@ -207,7 +229,9 @@ def _build_approval_block(approval_event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_provenance(
-    entry: dict[str, Any], approval_event: dict[str, Any] | None
+    entry: dict[str, Any],
+    approval_event: dict[str, Any] | None,
+    prior_entry_id: str | None = None,
 ) -> dict[str, str]:
     """Honestly tag each receipt field by what the adapter actually had.
 
@@ -291,6 +315,14 @@ def _build_provenance(
             prov["approval.approver.role"] = "observed"
         if approval_event.get("context"):
             prov["approval.context"] = "observed"
+
+    # Chain link provenance: AGT carries previous_hash natively (observed)
+    # but the prior entry_id is caller-supplied (the adapter does not see
+    # AGT's earlier entries on its own).
+    prior_hash = entry.get("previous_hash")
+    if prior_entry_id and isinstance(prior_hash, str):
+        prov["prior_receipt.receipt_id"] = "inferred"
+        prov["prior_receipt.receipt_hash"] = "observed"
 
     return prov
 

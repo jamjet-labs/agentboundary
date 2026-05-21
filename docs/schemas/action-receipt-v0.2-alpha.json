@@ -136,6 +136,16 @@
         "result_ref": { "type": "string" }
       }
     },
+    "prior_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_id", "receipt_hash"],
+      "description": "Singly-linked back-reference to the previous receipt in this emitter's stream. A verifier walking the chain detects deletion (broken link), reordering (hash mismatch), and insertion (forged hash). The first receipt in a stream omits this field.",
+      "properties": {
+        "receipt_id": { "type": "string", "format": "uuid" },
+        "receipt_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
     "provenance": {
       "type": "object",
       "additionalProperties": false,
@@ -168,7 +178,9 @@
         "execution.status": { "$ref": "#/$defs/provenanceValue" },
         "execution.completed_at": { "$ref": "#/$defs/provenanceValue" },
         "execution.error_code": { "$ref": "#/$defs/provenanceValue" },
-        "execution.result_ref": { "$ref": "#/$defs/provenanceValue" }
+        "execution.result_ref": { "$ref": "#/$defs/provenanceValue" },
+        "prior_receipt.receipt_id": { "$ref": "#/$defs/provenanceValue" },
+        "prior_receipt.receipt_hash": { "$ref": "#/$defs/provenanceValue" }
       }
     },
     "completeness_score": {

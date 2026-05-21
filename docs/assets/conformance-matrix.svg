@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 816" role="img" aria-label="AgentBoundary v0.1 conformance suite — 28 of 28 scenarios pass">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 864" role="img" aria-label="AgentBoundary conformance suite — 30 of 30 scenarios pass">
   <style>
     .bg { fill: #fafaf9; }
     .fg { fill: #1c1917; }
@@ -16,8 +16,8 @@
     .title { font-size: 15px; font-weight: 600; }
     .footer { font-size: 14px; font-weight: 600; }
   </style>
-  <rect class="bg" width="820" height="816" rx="8"/>
-  <text class="fg title" x="24" y="36">AgentBoundary conformance suite &#x2014; 28 scenarios (v0.1 + v0.2-alpha)</text>
+  <rect class="bg" width="820" height="864" rx="8"/>
+  <text class="fg title" x="24" y="36">AgentBoundary conformance suite &#x2014; 30 scenarios (v0.1 + v0.2-alpha)</text>
 
   <g transform="translate(24,72)">
     <text y="0"><tspan class="pass" font-weight="600">PASS</tspan>  <tspan class="fg">01-merge-allow</tspan>                              <tspan class="muted">0ms</tspan></text>
@@ -48,8 +48,10 @@
     <text y="600"><tspan class="pass" font-weight="600">PASS</tspan>  <tspan class="fg">26-completeness-below-threshold</tspan>             <tspan class="muted">0ms</tspan></text>
     <text y="624"><tspan class="pass" font-weight="600">PASS</tspan>  <tspan class="fg">27-completeness-score-mismatch</tspan>              <tspan class="muted">0ms</tspan></text>
     <text y="648"><tspan class="pass" font-weight="600">PASS</tspan>  <tspan class="fg">28-honest-completeness-passes</tspan>               <tspan class="muted">0ms</tspan></text>
+    <text y="672"><tspan class="pass" font-weight="600">PASS</tspan>  <tspan class="fg">29-valid-chain-passes</tspan>                       <tspan class="muted">0ms</tspan></text>
+    <text y="696"><tspan class="pass" font-weight="600">PASS</tspan>  <tspan class="fg">30-broken-chain-fires</tspan>                       <tspan class="muted">0ms</tspan></text>
   </g>
 
-  <text x="24" y="768" class="footer"><tspan class="accent">28 passed</tspan>  <tspan class="muted">&#x00B7;  0 failed  &#x00B7;  1ms total</tspan></text>
-  <text x="24" y="794" class="muted" font-size="12">$ npx agentboundary run scenarios/</text>
+  <text x="24" y="816" class="footer"><tspan class="accent">30 passed</tspan>  <tspan class="muted">&#x00B7;  0 failed  &#x00B7;  1ms total</tspan></text>
+  <text x="24" y="842" class="muted" font-size="12">$ npx agentboundary run scenarios/</text>
 </svg>

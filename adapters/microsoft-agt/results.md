@@ -1,16 +1,27 @@
-# Microsoft AGT — 25-scenario conformance evaluation
+# Microsoft AGT — 30-scenario conformance evaluation
 
-Evaluation date: 2026-05-21. AGT version: `microsoft/agent-governance-toolkit` main as of that date. Methodology: docs-only mapping per [`mapping.md`](mapping.md). Each row asks: *given AGT's normative emitted artifact, can a third-party verifier check the property the scenario tests?*
+Evaluation date: 2026-05-21 (v0.2-alpha re-run after prior_receipt
+ships). AGT version: `microsoft/agent-governance-toolkit` main as of
+that date. Methodology: docs-only mapping per [`mapping.md`](mapping.md).
+Each row asks: *given AGT's normative emitted artifact, can a third-party
+verifier check the property the scenario tests?*
 
-**Adapter output (2026-05-21):** v0.2-alpha by default. Every receipt the
-adapter produces carries a populated `provenance` block with honest tags
-for the four AGT gap fields (`policy.version`, `target.environment`,
-`tool.version`, `execution.result_ref` when synthesized) and a recomputed
-`completeness_score`. A verifier reading an adapter-produced receipt sees
-exactly which fields came from AGT directly and which the adapter
-synthesized. This is the response to the W7 evaluation's NOT COVERED
-column: the gaps are still real, but they're now self-reported
-in-receipt rather than hidden.
+**Adapter output (2026-05-21):** v0.2-alpha by default. Every receipt
+the adapter produces carries:
+
+- A populated `provenance` block with honest tags for the four AGT gap
+  fields (`policy.version`, `target.environment`, `tool.version`,
+  `execution.result_ref` when synthesized) and a recomputed
+  `completeness_score`.
+- A `prior_receipt` link when the caller supplies the prior `entry_id`,
+  built from AGT's native `previous_hash`. AGT's audit log is structurally
+  a hash-chain; the adapter exposes it as AgentBoundary's chain primitive.
+
+A verifier reading an adapter-produced receipt sees exactly which fields
+came from AGT directly and which the adapter synthesized. This is the
+substantive response to the W7 evaluation's NOT COVERED column: the gaps
+are still real, but they're now self-reported in-receipt rather than
+hidden.
 
 | Cell | Meaning |
 |---|---|
@@ -23,14 +34,25 @@ in-receipt rather than hidden.
 ## Summary
 
 ```
-PASS         10
+PASS         15  (+5 from v0.2-alpha integration: chain check + 4 positive
+                  boundary scenarios via adapter)
 PARTIAL       4
 DOCS-ONLY     1
 NOT COVERED   8
 N/A           2
               ──
-TOTAL        25
+TOTAL        30
 ```
+
+**Net change since W7 first run:** five additional PASS rows. Three from
+v0.2-alpha provenance + completeness scenarios (the adapter populates
+both honestly). Two from the new chain scenarios — AGT's `previous_hash`
+maps cleanly to v0.2-alpha's `prior_receipt.receipt_hash`, so when the
+adapter is told the prior `entry_id`, the chain check works end-to-end.
+The eight NOT COVERED rows are unchanged: those reflect AGT-side schema
+gaps (no `arguments_hash`, no approver identity, no policy version, no
+issued-vs-completed split) that v0.2-alpha cannot retrofit because they
+require AGT-side data the audit entry doesn't carry.
 
 ## Per-scenario results
 
@@ -61,17 +83,31 @@ TOTAL        25
 | 23 | malformed-receipt-id | **PASS** | AGT requires `entry_id` to be a UUID; non-UUID rejected at parse |
 | 24 | mutated-approver-no-rehash | **NOT COVERED** | Approval block is not part of `AuditEntry`, so there is nothing to mutate in the receipt; the verifier has no field to check |
 | 25 | clean-receipt-id-passes-replay | **PASS** | Merkle chain accepts a new entry with a fresh `entry_id` cleanly |
+| 26 | completeness-below-threshold | **PASS** | Adapter populates `provenance` + `completeness_score`; a verifier can set a minimum and reject low-quality translations |
+| 27 | completeness-score-mismatch | **PASS** | Adapter recomputes the score from its own provenance; mismatch is impossible by construction |
+| 28 | honest-completeness-passes | **PASS** | Adapter-emitted receipts always include `provenance` + `completeness_score`; positive boundary is met |
+| 29 | valid-chain-passes | **PASS** | When the caller supplies `prior_entry_id`, AGT's native `previous_hash` populates `prior_receipt.receipt_hash`; verifier accepts the chain link |
+| 30 | broken-chain-fires | **PASS** | An adapter-produced receipt with a tampered `prior_receipt.receipt_hash` is correctly rejected by the L4 check |
 
-## Per-conformance-level rollup
+## Per-conformance-level rollup (after v0.2-alpha integration)
 
 | Level | Of N applicable | PASS | PARTIAL | NOT COVERED |
 |---|---|---|---|---|
 | Level 1 (Logged) | 10 | 9 | 1 | 0 |
 | Level 2 (Policy-Bound) | 6 | 4 | 2 | 0 |
 | Level 3 (Portable Proof) | 5 | 1 | 0 | 4 |
-| Level 4 (Tamper-Evident) | 7 | 2 | 1 | 4 |
+| Level 4 (Tamper-Evident) | 12 | 7 | 1 | 4 |
 
-The pattern: AGT is **strong at Levels 1-2** (recording that an evaluation happened and which decision came out) and **weak at Levels 3-4** (the verifier-side recomputation guarantees). This isn't an indictment of AGT — AGT's design centre is *runtime enforcement*, where Levels 1-2 dominate. AgentBoundary's design centre is *third-party verification of artifacts after the fact*, where Levels 3-4 dominate.
+The L4 row went from 2/7 PASS to 7/12 PASS after v0.2-alpha integration —
+five new L4 scenarios all PASS because the adapter populates the new
+fields. The AGT-side gaps (no `arguments_hash`, no approver identity,
+no policy version) still drive the remaining NOT COVERED rows.
+
+The pattern is unchanged: AGT is **strong at Levels 1-2** (recording
+that an evaluation happened and which decision came out) and **weak at
+Levels 3-4** for the properties AGT's own schema can't express. v0.2-alpha
+extensions (provenance, completeness, prior_receipt) compensate by making
+the *adapter's translation losses* visible in the receipt itself.
 
 ## Where the gaps might matter
 

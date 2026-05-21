@@ -395,6 +395,103 @@ class TestLevel4Completeness:
         assert "LEVEL_4_COMPLETENESS_BELOW_THRESHOLD" not in codes
         assert "LEVEL_4_COMPLETENESS_SCORE_MISMATCH" not in codes
 
+
+class TestLevel4Chain:
+    """v0.2-alpha prior_receipt chain integrity checks."""
+
+    def _v02_receipt_with_prior(
+        self, prior_id: str, prior_hash: str, base: dict | None = None
+    ) -> dict:
+        from agentboundary.hashing import (
+            compute_arguments_hash as _ah,
+            compute_receipt_hash as _rh,
+        )
+
+        receipt = base or {
+            "version": "agentboundary/v0.2-alpha",
+            "receipt_id": "0192c8d0-1f2a-7c3e-bf2a-aaaaaaaaaaaa",
+            "issued_at": "2026-06-15T14:23:08Z",
+            "actor": {"type": "agent", "id": "agent:test"},
+            "agent": {"framework": "test", "framework_version": "1.0", "model": "test"},
+            "tool": {"name": "t", "capability": "test.do"},
+            "target": {"system": "test.example", "environment": "dev"},
+            "arguments_hash": _ah({"x": 1}),
+            "policy": {"name": "p", "version": "1", "decision": "allow"},
+            "execution": {
+                "status": "success",
+                "completed_at": "2026-06-15T14:23:09Z",
+            },
+        }
+        receipt["prior_receipt"] = {"receipt_id": prior_id, "receipt_hash": prior_hash}
+        receipt.pop("receipt_hash", None)
+        receipt["receipt_hash"] = _rh(receipt)
+        return receipt
+
+    def test_valid_chain_passes(self) -> None:
+        prior_id = "0192c8d0-1f2a-7c3e-bf2a-111111111111"
+        prior_hash = "a" * 64
+        receipt = self._v02_receipt_with_prior(prior_id, prior_hash)
+        checks = check_conformance(
+            receipt,
+            level=4,
+            arguments={"x": 1},
+            prior_receipt_hashes={prior_id: prior_hash},
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_BROKEN_CHAIN" not in codes
+
+    def test_chain_hash_mismatch_fires(self) -> None:
+        prior_id = "0192c8d0-1f2a-7c3e-bf2a-111111111111"
+        claimed_hash = "a" * 64
+        actual_hash = "b" * 64  # verifier has a different hash on file
+        receipt = self._v02_receipt_with_prior(prior_id, claimed_hash)
+        checks = check_conformance(
+            receipt,
+            level=4,
+            arguments={"x": 1},
+            prior_receipt_hashes={prior_id: actual_hash},
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_BROKEN_CHAIN" in codes
+
+    def test_chain_points_at_unknown_id_fires(self) -> None:
+        prior_id = "0192c8d0-1f2a-7c3e-bf2a-deadbeefdead"
+        receipt = self._v02_receipt_with_prior(prior_id, "a" * 64)
+        # Verifier knows different receipts, not the one claimed
+        checks = check_conformance(
+            receipt,
+            level=4,
+            arguments={"x": 1},
+            prior_receipt_hashes={"0192c8d0-1f2a-7c3e-bf2a-cccccccccccc": "c" * 64},
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_BROKEN_CHAIN" in codes
+
+    def test_chain_skipped_when_no_map_supplied(self) -> None:
+        receipt = self._v02_receipt_with_prior(
+            "0192c8d0-1f2a-7c3e-bf2a-111111111111", "a" * 64
+        )
+        checks = check_conformance(
+            receipt, level=4, arguments={"x": 1}, prior_receipt_hashes=None
+        )
+        codes = {(c.code, c.severity) for c in checks}
+        assert ("LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES", "info") in codes
+
+    def test_receipt_without_chain_link_skips_check_cleanly(
+        self, minimal_l3_receipt: dict
+    ) -> None:
+        """A receipt without prior_receipt must not fire the chain check
+        even when prior_receipt_hashes is supplied."""
+        checks = check_conformance(
+            minimal_l3_receipt,
+            level=4,
+            arguments={"x": 1},
+            prior_receipt_hashes={},
+        )
+        codes = {c.code for c in checks}
+        assert "LEVEL_4_BROKEN_CHAIN" not in codes
+        assert "LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES" not in codes
+
     def test_l4_skip_does_not_fire_when_context_supplied(
         self, receipt_with_approval: dict
     ) -> None:

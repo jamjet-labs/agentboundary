@@ -105,6 +105,7 @@ def check_conformance(
     prior_receipt_ids: set[str] | None = None,
     policy_store: set[tuple[str, str]] | None = None,
     minimum_completeness: float | None = None,
+    prior_receipt_hashes: dict[str, str] | None = None,
 ) -> list[ConformanceCheck]:
     """Run all conformance checks up to ``level`` against ``receipt``.
 
@@ -132,6 +133,13 @@ def check_conformance(
     omitted, the threshold check does not fire. The mismatch check
     (LEVEL_4_COMPLETENESS_SCORE_MISMATCH) always runs when a receipt
     declares completeness_score, independent of this kwarg.
+
+    ``prior_receipt_hashes`` maps prior receipt_id -> receipt_hash for
+    chain verification (v0.2-alpha ``prior_receipt`` field). Required for
+    the LEVEL_4_BROKEN_CHAIN check; absence emits
+    ``LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES``. An explicitly empty dict
+    is treated as "verifier has no chain to compare against" and the
+    receipt's claimed prior_receipt link is rejected as a broken chain.
     """
     if level < 1 or level > 4:
         raise ValueError(f"level must be in 1..4, got {level}")
@@ -288,6 +296,7 @@ def check_conformance(
                 prior_receipt_ids=prior_receipt_ids,
                 policy_store=policy_store,
                 minimum_completeness=minimum_completeness,
+                prior_receipt_hashes=prior_receipt_hashes,
             )
         )
 
@@ -301,6 +310,7 @@ def _level_4_checks(
     prior_receipt_ids: set[str] | None,
     policy_store: set[tuple[str, str]] | None,
     minimum_completeness: float | None,
+    prior_receipt_hashes: dict[str, str] | None,
 ) -> list[ConformanceCheck]:
     """Run Level 4 (Tamper-Evident) checks.
 
@@ -488,6 +498,59 @@ def _level_4_checks(
                     field="completeness_score",
                 )
             )
+
+    # Chain integrity: receipt's prior_receipt link must reference a
+    # prior receipt whose hash matches what's in the verifier's records.
+    # Detects deletion, reordering, and forged-hash insertion in the
+    # emitter's stream — the v0.2-alpha Merkle-style chain semantics.
+    prior_link = receipt.get("prior_receipt")
+    if isinstance(prior_link, dict):
+        if prior_receipt_hashes is None:
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES",
+                    severity="info",
+                    message=(
+                        "prior_receipt_hashes not supplied; "
+                        "LEVEL_4_BROKEN_CHAIN check skipped"
+                    ),
+                )
+            )
+        else:
+            claimed_id = prior_link.get("receipt_id")
+            claimed_hash = prior_link.get("receipt_hash")
+            actual_hash = (
+                prior_receipt_hashes.get(claimed_id) if isinstance(claimed_id, str) else None
+            )
+            if actual_hash is None:
+                out.append(
+                    ConformanceCheck(
+                        level=4,
+                        code="LEVEL_4_BROKEN_CHAIN",
+                        severity="fail",
+                        message=(
+                            f"prior_receipt.receipt_id={claimed_id!r} is not in "
+                            "the verifier's prior_receipt_hashes map; the chain "
+                            "link points at a missing or deleted receipt"
+                        ),
+                        field="prior_receipt.receipt_id",
+                    )
+                )
+            elif actual_hash != claimed_hash:
+                out.append(
+                    ConformanceCheck(
+                        level=4,
+                        code="LEVEL_4_BROKEN_CHAIN",
+                        severity="fail",
+                        message=(
+                            f"prior_receipt.receipt_hash={claimed_hash!r} does "
+                            f"not match the verifier's recorded hash "
+                            f"{actual_hash!r} for receipt_id {claimed_id!r}"
+                        ),
+                        field="prior_receipt.receipt_hash",
+                    )
+                )
 
     # Replay
     if prior_receipt_ids is None:

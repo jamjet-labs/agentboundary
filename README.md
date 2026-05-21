@@ -2,7 +2,7 @@
 
 > An open spec and conformance suite for proving AI-initiated production actions.
 
-![AgentBoundary conformance suite — 28 passed · 0 failed (v0.1 + v0.2-alpha)](docs/assets/conformance-matrix.svg)
+![AgentBoundary conformance suite — 30 passed · 0 failed (v0.1 + v0.2-alpha)](docs/assets/conformance-matrix.svg)
 
 ```bash
 npx agentboundary run scenarios/
@@ -10,7 +10,7 @@ npx agentboundary run scenarios/
 uvx agentboundary run scenarios/
 ```
 
-28 scenarios, 60 seconds, no signup, no Docker.
+30 scenarios, 60 seconds, no signup, no Docker.
 
 ## The problem AgentBoundary solves
 
@@ -47,8 +47,8 @@ This is `docs/receipts/github-merge.json` verbatim. The `receipt_hash` is the ca
 - [`docs/spec/owasp-mapping.md`](docs/spec/owasp-mapping.md) — OWASP LLM Top 10 risks mapped to AgentBoundary conformance levels
 - [`docs/schemas/action-receipt-v0.1.json`](docs/schemas/action-receipt-v0.1.json) — Action Receipt JSON Schema (normative source for receipt syntax)
 - [`docs/receipts/`](docs/receipts/README.md) — three worked example receipts (GitHub merge, Spring service mutation, Stripe refund); each one's `receipt_hash` verifies under the spec
-- [`scenarios/`](scenarios/) — 28 deterministic conformance scenarios driven by `agentboundary run` (10 lifecycle + 7 adversarial Level 4 + 8 positive boundary / hashing / schema + 3 v0.2-alpha provenance/completeness)
-- [`docs/spec/v0.2-alpha.md`](docs/spec/v0.2-alpha.md) — draft v0.2 delta: optional `provenance` + `completeness_score` fields for self-honest emission reporting
+- [`scenarios/`](scenarios/) — 30 deterministic conformance scenarios driven by `agentboundary run` (10 lifecycle + 7 adversarial Level 4 + 8 positive boundary / hashing / schema + 3 v0.2-alpha provenance/completeness + 2 v0.2-alpha chain)
+- [`docs/spec/v0.2-alpha.md`](docs/spec/v0.2-alpha.md) — draft v0.2 delta: optional `provenance` + `completeness_score` + `prior_receipt` fields for self-honest emission reporting and singly-linked chain-of-custody
 - [`src/agentboundary/`](src/agentboundary/) — Python reference implementation (validator, hashing, runtime, CLI)
 - [`npm/`](npm/) — thin Node wrapper that dispatches to `uvx`, `pipx`, or `python3 -m agentboundary`
 
@@ -59,7 +59,7 @@ pip install hatch
 hatch test
 ```
 
-138 fast tests cover the schema loader, validator, hashing, conformance checks (Levels 1-4 including v0.2-alpha completeness), runtime, scenarios loader, and CLI. 8 additional slow tests verify the published wheel behaves correctly under a clean install.
+145 fast tests cover the schema loader, validator, hashing, conformance checks (Levels 1-4 including v0.2-alpha completeness + chain integrity), runtime, scenarios loader, and CLI. 8 additional slow tests verify the published wheel behaves correctly under a clean install.
 
 ## License
 

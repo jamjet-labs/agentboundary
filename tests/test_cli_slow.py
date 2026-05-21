@@ -44,7 +44,12 @@ def test_run_single_scenario() -> None:
 def test_run_directory_all_pass() -> None:
     r = _agentboundary("run", "scenarios/")
     assert r.returncode == 0
-    assert "10 passed · 0 failed" in r.stdout
+    # Don't hard-code the scenario count — it grows over time. Assert the
+    # invariant ("0 failed, every scenario passed") via the totals line.
+    from pathlib import Path
+
+    expected_count = len(list(Path("scenarios").glob("[0-9]*.yaml")))
+    assert f"{expected_count} passed · 0 failed" in r.stdout
 
 
 def test_run_json_mode() -> None:

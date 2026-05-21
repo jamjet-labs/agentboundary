@@ -57,6 +57,11 @@
           "items": { "type": "string", "format": "uuid" }
         },
         "seed_receipt_id": { "type": "string", "format": "uuid" },
+        "minimum_completeness": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
         "approvals": {
           "type": "array",
           "items": {

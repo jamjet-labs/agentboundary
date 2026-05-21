@@ -148,6 +148,7 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
         policy_store = {
             (p["name"], p["version"]) for p in scenario.setup.get("policies", [])
         } or None
+        minimum_completeness = scenario.setup.get("minimum_completeness")
         checks = check_conformance(
             outcome.receipt,
             level=level,
@@ -155,6 +156,7 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
             policy_full=policy_full,
             prior_receipt_ids=prior_receipt_ids,
             policy_store=policy_store,
+            minimum_completeness=minimum_completeness,
         )
 
     required_codes = set(expect.get("failures_must_include", []))

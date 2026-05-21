@@ -2,6 +2,16 @@
 
 Evaluation date: 2026-05-21. AGT version: `microsoft/agent-governance-toolkit` main as of that date. Methodology: docs-only mapping per [`mapping.md`](mapping.md). Each row asks: *given AGT's normative emitted artifact, can a third-party verifier check the property the scenario tests?*
 
+**Adapter output (2026-05-21):** v0.2-alpha by default. Every receipt the
+adapter produces carries a populated `provenance` block with honest tags
+for the four AGT gap fields (`policy.version`, `target.environment`,
+`tool.version`, `execution.result_ref` when synthesized) and a recomputed
+`completeness_score`. A verifier reading an adapter-produced receipt sees
+exactly which fields came from AGT directly and which the adapter
+synthesized. This is the response to the W7 evaluation's NOT COVERED
+column: the gaps are still real, but they're now self-reported
+in-receipt rather than hidden.
+
 | Cell | Meaning |
 |---|---|
 | **PASS** | AGT's documented behaviour + the receipt the adapter produces from a normative AGT artifact survives this conformance check |

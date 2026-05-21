@@ -1,17 +1,23 @@
-"""Best-effort adapter: Microsoft AGT AuditEntry -> AgentBoundary v0.1 receipt.
+"""Best-effort adapter: Microsoft AGT AuditEntry -> AgentBoundary receipt.
 
 Given an AGT ``AuditEntry`` dictionary (per
 ``microsoft/agent-governance-toolkit`` ``docs/specs/AUDIT-COMPLIANCE-1.0.md``
 section 4.2) and optionally a ``DecisionBOM`` plus a workflow approval
-event, produce a structurally-valid AgentBoundary v0.1 receipt the suite
-can grade. See ``mapping.md`` for translation notes; see ``results.md``
-for which conformance scenarios survive the round-trip.
+event, produce a structurally-valid AgentBoundary receipt the suite can
+grade. See ``mapping.md`` for translation notes; see ``results.md`` for
+which conformance scenarios survive the round-trip.
 
 This is intentionally a *lossy* mapping. Fields AGT does not require are
 filled with adapter defaults (``"unknown"``, omitted, or computed locally
 where the inputs are available). Where lossage compromises a conformance
 property, ``results.md`` lists it as NOT COVERED rather than papering
 over the gap.
+
+Output format defaults to v0.2-alpha with a populated ``provenance`` block
+so a verifier can see at a glance which fields came from AGT directly and
+which the adapter synthesized. Pass ``schema_version="agentboundary/v0.1"``
+to produce a v0.1 receipt instead (no provenance, smaller surface) for
+callers that haven't migrated.
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
+from agentboundary.provenance import compute_completeness_score
 
 
 # AGT decision enum -> AgentBoundary policy.decision enum
@@ -44,13 +51,20 @@ def agt_entry_to_receipt(
     *,
     decision_bom: dict[str, Any] | None = None,
     approval_event: dict[str, Any] | None = None,
+    schema_version: str = "agentboundary/v0.2-alpha",
 ) -> dict[str, Any]:
-    """Translate one AGT AuditEntry into an AgentBoundary v0.1 receipt.
+    """Translate one AGT AuditEntry into an AgentBoundary receipt.
 
     ``decision_bom`` supplies richer policy + rule provenance when available.
     ``approval_event`` is the workflow-side approval record (out of scope
     for AGT's audit schema), included here so a deployment that DOES track
     approver identity can produce a Level 4-grade receipt.
+
+    ``schema_version`` defaults to v0.2-alpha. v0.2-alpha receipts include
+    a populated provenance block + computed completeness_score so a
+    verifier can see exactly which fields the adapter synthesized vs
+    pulled from AGT directly. Pass ``"agentboundary/v0.1"`` to suppress
+    the provenance fields.
     """
     receipt_id = entry["entry_id"]
     issued_at = entry["timestamp"]
@@ -63,7 +77,7 @@ def agt_entry_to_receipt(
     outcome = _OUTCOME_MAP.get(entry.get("outcome", "success"), "success")
 
     receipt: dict[str, Any] = {
-        "version": "agentboundary/v0.1",
+        "version": schema_version,
         "receipt_id": receipt_id,
         "issued_at": issued_at,
         "actor": {
@@ -81,6 +95,11 @@ def agt_entry_to_receipt(
         receipt["approval"] = _build_approval_block(approval_event)
 
     receipt["execution"] = _build_execution_block(entry, outcome)
+
+    if schema_version == "agentboundary/v0.2-alpha":
+        receipt["provenance"] = _build_provenance(entry, approval_event)
+        receipt["completeness_score"] = compute_completeness_score(receipt)
+
     receipt["receipt_hash"] = compute_receipt_hash(receipt)
     return receipt
 
@@ -185,6 +204,95 @@ def _build_approval_block(approval_event: dict[str, Any]) -> dict[str, Any]:
     if "context" in approval_event:
         block["context"] = approval_event["context"]
     return block
+
+
+def _build_provenance(
+    entry: dict[str, Any], approval_event: dict[str, Any] | None
+) -> dict[str, str]:
+    """Honestly tag each receipt field by what the adapter actually had.
+
+    Rules:
+    - AGT-required fields (entry_id, timestamp, agent_id, decision, outcome)
+      map straight across -> ``observed``
+    - Fields the adapter derives deterministically from AGT data
+      (actor.type from DID method; tool.capability from event_type;
+      target.{system,resource_id} from resource splitting) -> ``inferred``
+    - Fields AGT does not require (tool.version, policy.version, agent
+      metadata, target.environment default, execution.result_ref synthetic)
+      -> ``synthesized``
+    - Approval block fields are ``observed`` iff approval_event was supplied
+    """
+    metadata = entry.get("metadata", {}) if isinstance(entry.get("metadata"), dict) else {}
+    data = entry.get("data", {}) if isinstance(entry.get("data"), dict) else {}
+
+    prov: dict[str, str] = {
+        # Adapter-side translation: receipt_id and issued_at are direct
+        # copies from AGT's entry_id and timestamp -> observed.
+        "receipt_id": "observed",
+        "issued_at": "observed",
+        # Actor: id comes directly from agent_id; type is inferred from DID
+        # method conventions (no normative AGT enum).
+        "actor.type": "inferred",
+        "actor.id": "observed",
+        # Agent block: framework/version/model usually live in custom
+        # metadata. If present, observed; if missing, synthesized to "unknown".
+        "agent.framework": "observed" if metadata.get("framework") else "synthesized",
+        "agent.framework_version": "observed" if metadata.get("framework_version") else "synthesized",
+        "agent.model": "observed" if metadata.get("model") else "synthesized",
+        # Tool block:
+        # - name: AGT sample shape puts tool name in data.tool; observed when present
+        # - capability: derived from AGT's event_type enum -> inferred
+        "tool.name": "observed" if (data.get("tool") or metadata.get("tool_name")) else "synthesized",
+        "tool.capability": "inferred",
+        # Target block: AGT collapses target into one 'resource' string.
+        # Splitting on / to derive system+resource_id is deterministic -> inferred.
+        # AGT has no environment field; the adapter defaults to "prod" -> synthesized.
+        "target.system": "inferred",
+        "target.environment": "synthesized",
+        # arguments_hash: computed from data field at translation time -> observed
+        # (the adapter saw the raw arguments and hashed them itself).
+        "arguments_hash": "observed",
+        # Policy block:
+        # - name: maps to AGT's matched_rule -> observed
+        # - version: AGT has no version field -> always synthesized
+        # - decision: maps from AGT's decision enum -> observed
+        "policy.name": "observed" if entry.get("matched_rule") else "synthesized",
+        "policy.version": "synthesized",
+        "policy.decision": "observed",
+        # Execution: status/completed_at map straight across.
+        # AGT only has one timestamp so completed_at == issued_at -> inferred
+        # because the verifier reading the receipt should know the time was
+        # the audit-entry timestamp, not a separate execution-finish timestamp.
+        "execution.status": "observed",
+        "execution.completed_at": "inferred",
+    }
+
+    # Conditional paths: only set provenance for fields that will actually appear.
+    if metadata.get("model_version"):
+        prov["agent.model_version"] = "observed"
+    if metadata.get("tool_version"):
+        prov["tool.version"] = "observed"
+    # target.resource_id is always derived if resource has '/' -> inferred when present
+    resource = entry.get("resource", "")
+    if isinstance(resource, str) and "/" in resource:
+        prov["target.resource_id"] = "inferred"
+
+    if outcome_success := (entry.get("outcome") == "success"):
+        # result_ref is observed when AGT metadata.result_ref exists; otherwise
+        # synthesized (the adapter falls back to "agt://<entry_id>")
+        prov["execution.result_ref"] = "observed" if metadata.get("result_ref") else "synthesized"
+
+    if approval_event is not None:
+        prov["approval.approver.id"] = "observed"
+        prov["approval.approved_at"] = "observed"
+        if approval_event.get("approver_display_name"):
+            prov["approval.approver.display_name"] = "observed"
+        if approval_event.get("approver_role"):
+            prov["approval.approver.role"] = "observed"
+        if approval_event.get("context"):
+            prov["approval.context"] = "observed"
+
+    return prov
 
 
 def _build_execution_block(entry: dict[str, Any], outcome: str) -> dict[str, Any]:

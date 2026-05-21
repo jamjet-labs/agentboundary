@@ -1,0 +1,37 @@
+name: 27-completeness-score-mismatch
+description: |
+  Emitter declares completeness_score=0.95 but provenance is empty, so
+  the recomputed score is 0.0. Level 4 fires
+  LEVEL_4_COMPLETENESS_SCORE_MISMATCH.
+
+  Demonstrates that the verifier recomputes — an emitter cannot fabricate
+  a high score independent of its provenance reports. The mismatch check
+  catches forgery and implementation bugs.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+  inject:
+    - { op: mutate_field, path: version, value: "agentboundary/v0.2-alpha" }
+    - { op: mutate_field, path: provenance, value: {} }
+    - { op: mutate_field, path: completeness_score, value: 0.95, recompute_hash: true }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_4_COMPLETENESS_SCORE_MISMATCH"]

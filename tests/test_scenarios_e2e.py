@@ -82,6 +82,7 @@ def test_scenario_runs_to_its_declared_expectation(scenario) -> None:
         policy_store = {
             (p["name"], p["version"]) for p in scenario.setup.get("policies", [])
         } or None
+        minimum_completeness = scenario.setup.get("minimum_completeness")
         checks = check_conformance(
             receipt,
             level=level,
@@ -89,6 +90,7 @@ def test_scenario_runs_to_its_declared_expectation(scenario) -> None:
             policy_full=policy_full,
             prior_receipt_ids=prior_receipt_ids,
             policy_store=policy_store,
+            minimum_completeness=minimum_completeness,
         )
         actual_fails = {c.code for c in checks if c.severity == "fail"}
         for code in expect.get("failures_must_include", []):

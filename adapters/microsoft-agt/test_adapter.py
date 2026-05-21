@@ -62,6 +62,25 @@ def test_allow_entry_translates_to_valid_receipt() -> None:
     assert errors == [], f"adapter produced an invalid receipt: {errors}"
 
 
+def test_default_output_is_v02_alpha() -> None:
+    receipt = agt_entry_to_receipt(_agt_allow_entry())
+    assert receipt["version"] == "agentboundary/v0.2-alpha"
+    assert "provenance" in receipt
+    assert "completeness_score" in receipt
+
+
+def test_v01_opt_out_skips_provenance() -> None:
+    receipt = agt_entry_to_receipt(
+        _agt_allow_entry(), schema_version="agentboundary/v0.1"
+    )
+    assert receipt["version"] == "agentboundary/v0.1"
+    assert "provenance" not in receipt
+    assert "completeness_score" not in receipt
+    # Schema still validates
+    errors = validate_receipt(receipt)
+    assert errors == [], f"v0.1 fallback produced invalid receipt: {errors}"
+
+
 def test_allow_entry_passes_l2() -> None:
     receipt = agt_entry_to_receipt(_agt_allow_entry())
     checks = check_conformance(receipt, level=2)
@@ -71,8 +90,7 @@ def test_allow_entry_passes_l2() -> None:
 
 def test_allow_entry_passes_l3() -> None:
     receipt = agt_entry_to_receipt(_agt_allow_entry())
-    # arguments_hash is recomputable because the adapter has the raw data
-    arguments = {"query": "acme corp"}  # _extract_arguments filters out 'tool'
+    arguments = {"query": "acme corp"}
     checks = check_conformance(receipt, level=3, arguments=arguments)
     fails = [c for c in checks if c.severity == "fail"]
     assert fails == [], f"L3 failures: {[(c.code, c.message) for c in fails]}"
@@ -89,6 +107,36 @@ def test_l4_policy_downgrade_fires_because_agt_has_no_version() -> None:
     assert "LEVEL_4_POLICY_DOWNGRADE" in codes
 
 
+def test_provenance_marks_known_agt_gaps_as_synthesized() -> None:
+    """The adapter must honestly mark fields AGT can't natively express."""
+    receipt = agt_entry_to_receipt(_agt_allow_entry())
+    prov = receipt["provenance"]
+    # AGT has no policy version field — must be synthesized
+    assert prov["policy.version"] == "synthesized"
+    # AGT has no environment field — adapter defaults
+    assert prov["target.environment"] == "synthesized"
+    # AGT records observable fields
+    assert prov["receipt_id"] == "observed"
+    assert prov["actor.id"] == "observed"
+    assert prov["policy.decision"] == "observed"
+
+
+def test_completeness_score_score_below_one_for_typical_agt_entry() -> None:
+    """A typical AGT entry should produce a score below 1.0 because the
+    adapter has to synthesize policy.version + target.environment."""
+    receipt = agt_entry_to_receipt(_agt_allow_entry())
+    score = receipt["completeness_score"]
+    assert 0.5 < score < 1.0
+
+
+def test_completeness_score_matches_recomputed() -> None:
+    """Score the adapter writes must equal what a verifier recomputes."""
+    from agentboundary.provenance import compute_completeness_score
+
+    receipt = agt_entry_to_receipt(_agt_allow_entry())
+    assert receipt["completeness_score"] == compute_completeness_score(receipt)
+
+
 def test_approval_event_populates_block() -> None:
     receipt = agt_entry_to_receipt(
         _agt_escalate_entry(),
@@ -103,5 +151,8 @@ def test_approval_event_populates_block() -> None:
     assert "approval" in receipt
     assert receipt["approval"]["approver"]["id"] == "user:lead@acme"
     assert receipt["approval"]["approved_at"] == "2026-06-15T14:22:30Z"
+    # And provenance reflects that approval came from a real workflow event
+    assert receipt["provenance"]["approval.approver.id"] == "observed"
+    assert receipt["provenance"]["approval.approver.role"] == "observed"
     errors = validate_receipt(receipt)
     assert errors == [], f"adapter produced an invalid receipt: {errors}"

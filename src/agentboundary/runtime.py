@@ -1,8 +1,8 @@
 """Reference implementation of the AgentBoundary v0.1 lifecycle.
 
 This is the bundled implementation that ``agentboundary run`` exercises
-out of the box. Third-party implementations (Microsoft AGT, Statis, etc.)
-plug in as additional ``Implementation`` subclasses in W7+.
+out of the box. Third-party implementations plug in as additional
+``Implementation`` subclasses via vendor adapters under ``adapters/``.
 """
 
 from __future__ import annotations

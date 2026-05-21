@@ -1,0 +1,36 @@
+name: 31-allow-with-blocked-execution
+description: |
+  Honest-failure positive boundary: policy decides allow, but the action
+  itself failed at execute time (e.g., the downstream GitHub API returned
+  404). Receipt records policy.decision=allow + execution.status=blocked
+  — the action did not run. Level 4 MUST NOT fire LEVEL_4_DENY_EXECUTED
+  or any contradiction check.
+
+  This is the receipt JamBot emits when an approved /file-issue hits a
+  GitHub error: the policy approved, the execution failed, and the
+  receipt records both honestly. The spec must support this path.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+  inject:
+    - { op: mutate_field, path: execution.status, value: blocked, recompute_hash: true }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true

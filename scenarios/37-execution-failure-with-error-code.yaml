@@ -1,0 +1,39 @@
+name: 37-execution-failure-with-error-code
+description: |
+  Policy allowed the action; the action executed and FAILED at the
+  downstream system (e.g., a 5xx from the target API). execution.status
+  is "failure", with an error_code populated. Distinct from "blocked"
+  (action didn't run) — failure means the action ran and failed.
+
+  Spec must support this distinction; an audit trail that conflates
+  "didn't run" with "ran and failed" loses critical compliance
+  information.
+setup:
+  policies:
+    - name: acme.payments.refunds
+      version: "5"
+      rule: allow
+      capabilities: [stripe.refund]
+action:
+  actor: { type: agent, id: "agent:refund-bot:session/demo" }
+  agent:
+    framework: cloudflare-agents
+    framework_version: "0.1.5"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: stripe-api, version: "2024-06-20", capability: stripe.refund }
+  target:
+    system: stripe.com
+    environment: prod
+    resource_id: charge_3PqLcwIuV5oBHnYR0H8jKQ4F
+  arguments: { charge_id: charge_3PqLcwIuV5oBHnYR0H8jKQ4F, amount_cents: 4200 }
+  inject:
+    - { op: mutate_field, path: execution.status, value: failure }
+    - { op: mutate_field, path: execution.error_code, value: STRIPE_502_BAD_GATEWAY, recompute_hash: true }
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true
+  assertions:
+    - { field: execution.status, equals: failure }
+    - { field: execution.error_code, equals: STRIPE_502_BAD_GATEWAY }

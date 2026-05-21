@@ -1,0 +1,30 @@
+name: 34-empty-arguments-validate
+description: |
+  Tool call with an empty arguments object. Edge case for hash and
+  canonical-JSON handling — empty object has a stable, well-defined hash
+  ("44f683a84163b3523afe57c2e008bc8b0c6a285e8b06fe6e3c7a0a5ec24e7df8"
+  for canonical JSON `{}`). Spec must support tool calls that take no
+  arguments (e.g., a "ping" tool).
+setup:
+  policies:
+    - name: opslib.healthcheck.ping
+      version: "1"
+      rule: allow
+      capabilities: [system.healthcheck]
+action:
+  actor: { type: system, id: "system:scheduled-check" }
+  agent:
+    framework: opslib
+    framework_version: "1.0"
+    model: claude-haiku-4-5
+    model_version: "20251001"
+  tool: { name: pinger, version: "0.1.0", capability: system.healthcheck }
+  target:
+    system: api.acme.com
+    environment: prod
+    resource_id: ping
+  arguments: {}
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true

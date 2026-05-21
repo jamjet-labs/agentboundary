@@ -1,0 +1,30 @@
+name: 35-staging-environment-validates
+description: |
+  target.environment="staging" — non-prod value in the enum. A staging
+  receipt is just as schema-valid as a prod receipt; non-prod data needs
+  the same audit-trail discipline.
+setup:
+  policies:
+    - name: acme.staging.deploy
+      version: "1"
+      rule: allow
+      capabilities: [kubernetes.rollout]
+action:
+  actor: { type: agent, id: "agent:deployer:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: kubectl, version: "1.30.0", capability: kubernetes.rollout }
+  target:
+    system: cluster.staging.acme.io
+    environment: staging
+    resource_id: deployment/api-gateway
+  arguments: { image: "acme/api-gateway:1.4.2", replicas: 3 }
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true
+  assertions:
+    - { field: target.environment, equals: staging }

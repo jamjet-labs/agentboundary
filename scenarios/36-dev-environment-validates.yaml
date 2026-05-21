@@ -1,0 +1,31 @@
+name: 36-dev-environment-validates
+description: |
+  target.environment="dev" — completes coverage of the environment enum
+  (prod, staging, dev). Dev-environment actions get receipts with the
+  same schema discipline as prod; this is how a team verifies their
+  CI's local-dev tooling emits compatible artifacts.
+setup:
+  policies:
+    - name: acme.dev.scratch
+      version: "1"
+      rule: allow
+      capabilities: [db.execute]
+action:
+  actor: { type: human, id: "user:dev@acme", display_name: "Dev Engineer" }
+  agent:
+    framework: claude-agent-sdk
+    framework_version: "0.4.0"
+    model: claude-sonnet-4-7
+  tool: { name: postgres, version: "16.3", capability: db.execute }
+  target:
+    system: localhost.acme
+    environment: dev
+    resource_id: scratch_db/user_table
+  arguments: { sql: "SELECT count(*) FROM users" }
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true
+  assertions:
+    - { field: target.environment, equals: dev }
+    - { field: actor.type, equals: human }

@@ -1,0 +1,62 @@
+name: 40-large-arguments-validate
+description: |
+  Tool call with a substantial arguments payload (large string field
+  simulating a multi-paragraph LLM-generated body). The hash must scale
+  to realistic real-world action sizes without truncation or buffer
+  issues. v0.1 freeze landmark scenario — Level 3 hashing on the kind
+  of input agents actually produce.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.pulls.create]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-rest, version: "2022-11-28", capability: github.pulls.create }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: jamjet-labs/agentboundary
+  arguments:
+    title: "feat(conformance): expand suite to 40 scenarios (W10 freeze)"
+    head: feature/w10-scenarios
+    base: main
+    body: |
+      ## Summary
+
+      This PR rounds out the v0.1 conformance suite from 30 to 40
+      scenarios to hit the W10 spec-freeze target from PM-MEMO v4.
+
+      The new scenarios cover honest-failure paths (allow + blocked),
+      chain-fork tolerance, unicode and edge-case argument hashing,
+      non-prod environment values, explicit failure with error_code,
+      minimal approval blocks, deeply nested arguments, and this
+      meta-scenario itself — large arguments that exercise the hash
+      pipeline on realistic LLM-generated content.
+
+      After this PR, the v0.1 spec semantics are stable. Future
+      changes go to v0.2-alpha or later.
+
+      ## Checks
+
+      - 40 scenarios pass `agentboundary run scenarios/`
+      - Fast test count: 145 → ~160
+      - Conformance matrix SVG regenerated
+      - README + spec text reflects new totals
+
+      ## Out of scope
+
+      - v0.2-alpha provenance + chain primitives (shipped earlier)
+      - Vendor-adapter additions (already landed for Microsoft AGT,
+        Anthropic permission_policy, LangSmith Gateway, Cloudflare HITL)
+      - W11 video script + W12 comparative-report copy
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true

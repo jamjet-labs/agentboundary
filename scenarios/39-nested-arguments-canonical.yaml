@@ -1,0 +1,49 @@
+name: 39-nested-arguments-canonical
+description: |
+  Deeply nested arguments object (multiple object/array levels).
+  Canonical-JSON must traverse the full tree, sort keys at every level,
+  and produce a stable hash regardless of source serialization order.
+  Real-world tool calls (e.g., MCP requests with nested resource selectors)
+  commonly look like this.
+setup:
+  policies:
+    - name: acme.workflows.execute
+      version: "3"
+      rule: allow
+      capabilities: [workflow.execute]
+action:
+  actor: { type: agent, id: "agent:orchestrator:session/demo" }
+  agent:
+    framework: claude-agent-sdk
+    framework_version: "0.4.0"
+    model: claude-sonnet-4-7
+    model_version: "20260415"
+  tool: { name: workflow-runner, version: "2.1.0", capability: workflow.execute }
+  target:
+    system: workflows.acme.com
+    environment: prod
+    resource_id: workflow/customer-onboarding
+  arguments:
+    workflow_id: wf-2026-q2-001
+    parameters:
+      customer:
+        id: cust_4791
+        segment: enterprise
+        contacts:
+          - { role: primary, email: alice@example.com, phone: "+1-555-0100" }
+          - { role: billing, email: billing@example.com, phone: "+1-555-0101" }
+      flags:
+        skip_kyc: false
+        enable_premium: true
+        notification_channels: [email, slack, webhook]
+      metadata:
+        source: api
+        request_id: req_29a4bb7e
+        nested:
+          deep:
+            very_deep:
+              leaf_value: "yes really this deep"
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true

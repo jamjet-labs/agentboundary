@@ -12,6 +12,8 @@ uvx agentboundary run scenarios/
 
 40 scenarios, 60 seconds, no signup, no Docker.
 
+**v0.1** is the stable spec. **v0.2-alpha** (draft) adds three optional fields — `provenance`, `completeness_score`, `prior_receipt` — for self-honest emission reporting and singly-linked chain-of-custody. See [`docs/spec/v0.2-alpha.md`](docs/spec/v0.2-alpha.md).
+
 ## The problem AgentBoundary solves
 
 Every agent framework can tell you *what an agent did*. None of them lets a third party — auditor, regulator, insurer, the team in the next building — verify *what the agent was allowed to do, by whom, against which policy, with which arguments, with what outcome*, without trusting the framework or model provider.
@@ -53,6 +55,14 @@ This is `docs/receipts/github-merge.json` verbatim. The `receipt_hash` is the ca
 - [`adapters/`](adapters/) — translation layers from existing agent-governance products to AgentBoundary v0.2-alpha receipts (Microsoft AGT, Anthropic permission_policy, LangSmith Gateway, Cloudflare HITL); each adapter ships its own `mapping.md`, `results.md`, and smoke tests
 - [`src/agentboundary/`](src/agentboundary/) — Python reference implementation (validator, hashing, runtime, CLI)
 - [`npm/`](npm/) — thin Node wrapper that dispatches to `uvx`, `pipx`, or `python3 -m agentboundary`
+
+## Comparison with other agent-governance products
+
+![Cross-vendor conformance matrix — 40 scenarios × JamJet reference + Microsoft AGT, Anthropic permission_policy, LangSmith Gateway, Cloudflare HITL](docs/assets/comparative-matrix.svg)
+
+Each vendor adapter in [`adapters/`](adapters/) translates that vendor's normative artifact (or, where there isn't one, the documented-recommended capture shape) into an AgentBoundary v0.2-alpha receipt, runs all 40 scenarios against the result, and records what survives. Per-vendor `results.md` files document every PASS / PARTIAL / DOCS-ONLY / NOT COVERED with structural reasoning. The data table that drives the matrix lives in [`scripts/generate-comparative-matrix.py`](scripts/generate-comparative-matrix.py); the SVG above is a deterministic function of that table.
+
+The framing in the comparative report is that AGT and AgentBoundary are *closest peers* (both artifact formats); Cloudflare HITL is a workflow primitive (durable approval gates), not an emitted-artifact format; LangSmith is the richest observability platform but deliberately leaves the audit schema to team convention; Anthropic ships the most layered runtime permission primitive but does not publish a portable audit-log schema. Comparison reveals that none of the four exposes a single-artifact verification pattern a third party can run without trusting the vendor's runtime — which is the gap this spec fills.
 
 ## Run the tests
 

@@ -1,0 +1,539 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 1262" role="img" aria-label="AgentBoundary conformance matrix — 40 scenarios across JamJet reference and four agent-governance products">
+<style>.bg{fill:#fafaf9}.fg{fill:#1c1917}.muted{fill:#57534e}.accent{fill:#b45309}.row-band{fill:#fafaf9}.row-band-alt{fill:#f5f5f4}.row-divider{stroke:#e7e5e4;stroke-width:1}.col-divider{stroke:#d6d3d1;stroke-width:1}@media (prefers-color-scheme: dark){.bg{fill:#0c0a09}.fg{fill:#f5f5f4}.muted{fill:#a8a29e}.accent{fill:#fbbf24}.row-band{fill:#0c0a09}.row-band-alt{fill:#1c1917}.row-divider{stroke:#292524}.col-divider{stroke:#44403c}}text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:12px}.title{font-size:16px;font-weight:600}.subtitle{font-size:11px}.col-header{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em}.scenario-name{font-family:ui-monospace,"SF Mono",Menlo,Monaco,monospace;font-size:11px}.verdict{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10px;font-weight:600;text-anchor:middle}.tally-label{font-size:11px;font-weight:600}.tally-num{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;text-anchor:middle}.legend{font-size:11px}</style>
+<rect class="bg" width="1180" height="1262"/>
+<text class="fg title" x="24" y="32">AgentBoundary v0.1 conformance — cross-vendor matrix</text>
+<text class="muted subtitle" x="24" y="50">40 deterministic scenarios &#x00B7; 4 named products &#x00B7; docs-only methodology &#x00B7; right-to-respond opened pre-publication</text>
+<text class="muted col-header" x="24" y="80">#  scenario</text>
+<text class="muted col-header" x="482" y="80" text-anchor="middle">JamJet ref</text>
+<text class="muted col-header" x="638" y="80" text-anchor="middle">Anthropic</text>
+<text class="muted col-header" x="794" y="80" text-anchor="middle">Cloudflare</text>
+<text class="muted col-header" x="950" y="80" text-anchor="middle">LangSmith</text>
+<text class="muted col-header" x="1106" y="80" text-anchor="middle">Microsoft AGT</text>
+<rect class="row-band" x="24" y="96" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="112">01  merge-allow</text>
+<rect x="408" y="100" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="112" fill="#166534">PASS</text>
+<rect x="564" y="100" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="112" fill="#92400e">PART</text>
+<rect x="720" y="100" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="794" y="112" fill="#92400e">PART</text>
+<rect x="876" y="100" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="112" fill="#92400e">PART</text>
+<rect x="1032" y="100" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="112" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="120" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="136">02  mutation-require-approval</text>
+<rect x="408" y="124" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="136" fill="#166534">PASS</text>
+<rect x="564" y="124" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="136" fill="#166534">PASS</text>
+<rect x="720" y="124" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="794" y="136" fill="#166534">PASS</text>
+<rect x="876" y="124" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="136" fill="#92400e">PART</text>
+<rect x="1032" y="124" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="1106" y="136" fill="#92400e">PART</text>
+<rect class="row-band" x="24" y="144" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="160">03  refund-under-limit</text>
+<rect x="408" y="148" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="160" fill="#166534">PASS</text>
+<rect x="564" y="148" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="160" fill="#92400e">PART</text>
+<rect x="720" y="148" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="794" y="160" fill="#92400e">PART</text>
+<rect x="876" y="148" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="160" fill="#92400e">PART</text>
+<rect x="1032" y="148" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="160" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="168" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="184">04  merge-deny</text>
+<rect x="408" y="172" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="184" fill="#166534">PASS</text>
+<rect x="564" y="172" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="184" fill="#166534">PASS</text>
+<rect x="720" y="172" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="794" y="184" fill="#166534">PASS</text>
+<rect x="876" y="172" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="184" fill="#92400e">PART</text>
+<rect x="1032" y="172" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="184" fill="#166534">PASS</text>
+<rect class="row-band" x="24" y="192" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="208">05  refund-escalate</text>
+<rect x="408" y="196" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="208" fill="#166534">PASS</text>
+<rect x="564" y="196" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="208" fill="#78716c">—</text>
+<rect x="720" y="196" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="208" fill="#78716c">—</text>
+<rect x="876" y="196" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="208" fill="#92400e">PART</text>
+<rect x="1032" y="196" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="208" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="216" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="232">06  missing-policy-block</text>
+<rect x="408" y="220" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="232" fill="#166534">PASS</text>
+<rect x="564" y="220" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="232" fill="#78716c">—</text>
+<rect x="720" y="220" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="232" fill="#78716c">—</text>
+<rect x="876" y="220" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="950" y="232" fill="#78716c">—</text>
+<rect x="1032" y="220" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="1106" y="232" fill="#92400e">PART</text>
+<rect class="row-band" x="24" y="240" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="256">07  bad-timestamp-format</text>
+<rect x="408" y="244" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="256" fill="#166534">PASS</text>
+<rect x="564" y="244" width="148" height="16" rx="3" fill="#e0e7ff"/>
+<text class="verdict" x="638" y="256" fill="#3730a3">DOCS</text>
+<rect x="720" y="244" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="794" y="256" fill="#166534">PASS</text>
+<rect x="876" y="244" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="256" fill="#166534">PASS</text>
+<rect x="1032" y="244" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="256" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="264" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="280">08  arguments-hash-mismatch</text>
+<rect x="408" y="268" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="280" fill="#166534">PASS</text>
+<rect x="564" y="268" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="280" fill="#166534">PASS</text>
+<rect x="720" y="268" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="280" fill="#78716c">—</text>
+<rect x="876" y="268" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="280" fill="#166534">PASS</text>
+<rect x="1032" y="268" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="280" fill="#78716c">—</text>
+<rect class="row-band" x="24" y="288" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="304">09  receipt-hash-mismatch</text>
+<rect x="408" y="292" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="304" fill="#166534">PASS</text>
+<rect x="564" y="292" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="304" fill="#78716c">—</text>
+<rect x="720" y="292" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="304" fill="#78716c">—</text>
+<rect x="876" y="292" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="950" y="304" fill="#78716c">—</text>
+<rect x="1032" y="292" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="304" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="312" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="328">10  claim-level-3-without-hash</text>
+<rect x="408" y="316" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="328" fill="#166534">PASS</text>
+<rect x="564" y="316" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="328" fill="#78716c">—</text>
+<rect x="720" y="316" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="328" fill="#78716c">—</text>
+<rect x="876" y="316" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="950" y="328" fill="#78716c">—</text>
+<rect x="1032" y="316" width="148" height="16" rx="3" fill="#e0e7ff"/>
+<text class="verdict" x="1106" y="328" fill="#3730a3">DOCS</text>
+<rect class="row-band" x="24" y="336" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="352">11  stale-approval</text>
+<rect x="408" y="340" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="352" fill="#166534">PASS</text>
+<rect x="564" y="340" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="352" fill="#78716c">—</text>
+<rect x="720" y="340" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="352" fill="#78716c">—</text>
+<rect x="876" y="340" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="950" y="352" fill="#78716c">—</text>
+<rect x="1032" y="340" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="352" fill="#78716c">—</text>
+<rect class="row-band-alt" x="24" y="360" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="376">12  unauthorized-approver</text>
+<rect x="408" y="364" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="376" fill="#166534">PASS</text>
+<rect x="564" y="364" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="376" fill="#92400e">PART</text>
+<rect x="720" y="364" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="794" y="376" fill="#92400e">PART</text>
+<rect x="876" y="364" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="376" fill="#92400e">PART</text>
+<rect x="1032" y="364" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="376" fill="#78716c">—</text>
+<rect class="row-band" x="24" y="384" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="400">13  replay-receipt-id</text>
+<rect x="408" y="388" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="400" fill="#166534">PASS</text>
+<rect x="564" y="388" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="400" fill="#166534">PASS</text>
+<rect x="720" y="388" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="400" fill="#78716c">—</text>
+<rect x="876" y="388" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="400" fill="#166534">PASS</text>
+<rect x="1032" y="388" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="400" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="408" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="424">14  completed-before-issued</text>
+<rect x="408" y="412" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="424" fill="#166534">PASS</text>
+<rect x="564" y="412" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="424" fill="#92400e">PART</text>
+<rect x="720" y="412" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="424" fill="#78716c">—</text>
+<rect x="876" y="412" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="424" fill="#166534">PASS</text>
+<rect x="1032" y="412" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="424" fill="#78716c">—</text>
+<rect class="row-band" x="24" y="432" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="448">15  policy-version-downgrade</text>
+<rect x="408" y="436" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="448" fill="#166534">PASS</text>
+<rect x="564" y="436" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="448" fill="#78716c">—</text>
+<rect x="720" y="436" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="448" fill="#78716c">—</text>
+<rect x="876" y="436" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="950" y="448" fill="#78716c">—</text>
+<rect x="1032" y="436" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="448" fill="#78716c">—</text>
+<rect class="row-band-alt" x="24" y="456" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="472">16  deny-with-execution-success</text>
+<rect x="408" y="460" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="472" fill="#166534">PASS</text>
+<rect x="564" y="460" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="472" fill="#92400e">PART</text>
+<rect x="720" y="460" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="472" fill="#78716c">—</text>
+<rect x="876" y="460" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="472" fill="#92400e">PART</text>
+<rect x="1032" y="460" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="1106" y="472" fill="#92400e">PART</text>
+<rect class="row-band" x="24" y="480" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="496">17  approval-inside-window</text>
+<rect x="408" y="484" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="496" fill="#166534">PASS</text>
+<rect x="564" y="484" width="148" height="16" rx="3" fill="#fafaf9"/>
+<text class="verdict" x="638" y="496" fill="#a8a29e">N/A</text>
+<rect x="720" y="484" width="148" height="16" rx="3" fill="#fafaf9"/>
+<text class="verdict" x="794" y="496" fill="#a8a29e">N/A</text>
+<rect x="876" y="484" width="148" height="16" rx="3" fill="#fafaf9"/>
+<text class="verdict" x="950" y="496" fill="#a8a29e">N/A</text>
+<rect x="1032" y="484" width="148" height="16" rx="3" fill="#fafaf9"/>
+<text class="verdict" x="1106" y="496" fill="#a8a29e">N/A</text>
+<rect class="row-band-alt" x="24" y="504" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="520">18  known-policy-store-passes</text>
+<rect x="408" y="508" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="520" fill="#166534">PASS</text>
+<rect x="564" y="508" width="148" height="16" rx="3" fill="#fafaf9"/>
+<text class="verdict" x="638" y="520" fill="#a8a29e">N/A</text>
+<rect x="720" y="508" width="148" height="16" rx="3" fill="#fafaf9"/>
+<text class="verdict" x="794" y="520" fill="#a8a29e">N/A</text>
+<rect x="876" y="508" width="148" height="16" rx="3" fill="#fafaf9"/>
+<text class="verdict" x="950" y="520" fill="#a8a29e">N/A</text>
+<rect x="1032" y="508" width="148" height="16" rx="3" fill="#fafaf9"/>
+<text class="verdict" x="1106" y="520" fill="#a8a29e">N/A</text>
+<rect class="row-band" x="24" y="528" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="544">19  actor-human-validates</text>
+<rect x="408" y="532" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="544" fill="#166534">PASS</text>
+<rect x="564" y="532" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="544" fill="#78716c">—</text>
+<rect x="720" y="532" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="794" y="544" fill="#92400e">PART</text>
+<rect x="876" y="532" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="544" fill="#92400e">PART</text>
+<rect x="1032" y="532" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="1106" y="544" fill="#92400e">PART</text>
+<rect class="row-band-alt" x="24" y="552" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="568">20  numeric-arguments-validate</text>
+<rect x="408" y="556" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="568" fill="#166534">PASS</text>
+<rect x="564" y="556" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="568" fill="#166534">PASS</text>
+<rect x="720" y="556" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="568" fill="#78716c">—</text>
+<rect x="876" y="556" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="568" fill="#166534">PASS</text>
+<rect x="1032" y="556" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="568" fill="#78716c">—</text>
+<rect class="row-band" x="24" y="576" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="592">21  multiline-arguments-validate</text>
+<rect x="408" y="580" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="592" fill="#166534">PASS</text>
+<rect x="564" y="580" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="592" fill="#166534">PASS</text>
+<rect x="720" y="580" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="592" fill="#78716c">—</text>
+<rect x="876" y="580" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="592" fill="#166534">PASS</text>
+<rect x="1032" y="580" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="592" fill="#78716c">—</text>
+<rect class="row-band-alt" x="24" y="600" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="616">22  missing-execution-block</text>
+<rect x="408" y="604" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="616" fill="#166534">PASS</text>
+<rect x="564" y="604" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="616" fill="#78716c">—</text>
+<rect x="720" y="604" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="616" fill="#78716c">—</text>
+<rect x="876" y="604" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="950" y="616" fill="#78716c">—</text>
+<rect x="1032" y="604" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="616" fill="#166534">PASS</text>
+<rect class="row-band" x="24" y="624" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="640">23  malformed-receipt-id</text>
+<rect x="408" y="628" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="640" fill="#166534">PASS</text>
+<rect x="564" y="628" width="148" height="16" rx="3" fill="#e0e7ff"/>
+<text class="verdict" x="638" y="640" fill="#3730a3">DOCS</text>
+<rect x="720" y="628" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="794" y="640" fill="#92400e">PART</text>
+<rect x="876" y="628" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="640" fill="#166534">PASS</text>
+<rect x="1032" y="628" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="640" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="648" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="664">24  mutated-approver-no-rehash</text>
+<rect x="408" y="652" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="664" fill="#166534">PASS</text>
+<rect x="564" y="652" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="664" fill="#78716c">—</text>
+<rect x="720" y="652" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="664" fill="#78716c">—</text>
+<rect x="876" y="652" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="950" y="664" fill="#78716c">—</text>
+<rect x="1032" y="652" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="664" fill="#78716c">—</text>
+<rect class="row-band" x="24" y="672" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="688">25  clean-receipt-id-passes-replay</text>
+<rect x="408" y="676" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="688" fill="#166534">PASS</text>
+<rect x="564" y="676" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="688" fill="#166534">PASS</text>
+<rect x="720" y="676" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="688" fill="#78716c">—</text>
+<rect x="876" y="676" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="688" fill="#166534">PASS</text>
+<rect x="1032" y="676" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="688" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="696" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="712">26  completeness-below-threshold</text>
+<rect x="408" y="700" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="712" fill="#166534">PASS</text>
+<rect x="564" y="700" width="148" height="16" rx="3" fill="#e0e7ff"/>
+<text class="verdict" x="638" y="712" fill="#3730a3">DOCS</text>
+<rect x="720" y="700" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="794" y="712" fill="#166534">PASS</text>
+<rect x="876" y="700" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="712" fill="#166534">PASS</text>
+<rect x="1032" y="700" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="712" fill="#166534">PASS</text>
+<rect class="row-band" x="24" y="720" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="736">27  completeness-score-mismatch</text>
+<rect x="408" y="724" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="736" fill="#166534">PASS</text>
+<rect x="564" y="724" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="736" fill="#92400e">PART</text>
+<rect x="720" y="724" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="794" y="736" fill="#166534">PASS</text>
+<rect x="876" y="724" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="736" fill="#166534">PASS</text>
+<rect x="1032" y="724" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="736" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="744" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="760">28  honest-completeness-passes</text>
+<rect x="408" y="748" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="760" fill="#166534">PASS</text>
+<rect x="564" y="748" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="760" fill="#92400e">PART</text>
+<rect x="720" y="748" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="794" y="760" fill="#92400e">PART</text>
+<rect x="876" y="748" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="760" fill="#92400e">PART</text>
+<rect x="1032" y="748" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="1106" y="760" fill="#92400e">PART</text>
+<rect class="row-band" x="24" y="768" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="784">29  valid-chain-passes</text>
+<rect x="408" y="772" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="784" fill="#166534">PASS</text>
+<rect x="564" y="772" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="784" fill="#78716c">—</text>
+<rect x="720" y="772" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="784" fill="#78716c">—</text>
+<rect x="876" y="772" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="950" y="784" fill="#78716c">—</text>
+<rect x="1032" y="772" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="784" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="792" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="808">30  broken-chain-fires</text>
+<rect x="408" y="796" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="808" fill="#166534">PASS</text>
+<rect x="564" y="796" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="808" fill="#78716c">—</text>
+<rect x="720" y="796" width="148" height="16" rx="3" fill="#e0e7ff"/>
+<text class="verdict" x="794" y="808" fill="#3730a3">DOCS</text>
+<rect x="876" y="796" width="148" height="16" rx="3" fill="#e0e7ff"/>
+<text class="verdict" x="950" y="808" fill="#3730a3">DOCS</text>
+<rect x="1032" y="796" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="808" fill="#166534">PASS</text>
+<rect class="row-band" x="24" y="816" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="832">31  allow-with-blocked-execution</text>
+<rect x="408" y="820" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="832" fill="#166534">PASS</text>
+<rect x="564" y="820" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="832" fill="#92400e">PART</text>
+<rect x="720" y="820" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="832" fill="#78716c">—</text>
+<rect x="876" y="820" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="832" fill="#92400e">PART</text>
+<rect x="1032" y="820" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="832" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="840" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="856">32  fork-chain-shared-prior</text>
+<rect x="408" y="844" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="856" fill="#166534">PASS</text>
+<rect x="564" y="844" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="856" fill="#78716c">—</text>
+<rect x="720" y="844" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="856" fill="#78716c">—</text>
+<rect x="876" y="844" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="856" fill="#92400e">PART</text>
+<rect x="1032" y="844" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="856" fill="#166534">PASS</text>
+<rect class="row-band" x="24" y="864" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="880">33  unicode-arguments-validate</text>
+<rect x="408" y="868" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="880" fill="#166534">PASS</text>
+<rect x="564" y="868" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="880" fill="#166534">PASS</text>
+<rect x="720" y="868" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="880" fill="#78716c">—</text>
+<rect x="876" y="868" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="880" fill="#166534">PASS</text>
+<rect x="1032" y="868" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="880" fill="#78716c">—</text>
+<rect class="row-band-alt" x="24" y="888" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="904">34  empty-arguments-validate</text>
+<rect x="408" y="892" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="904" fill="#166534">PASS</text>
+<rect x="564" y="892" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="904" fill="#166534">PASS</text>
+<rect x="720" y="892" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="904" fill="#78716c">—</text>
+<rect x="876" y="892" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="904" fill="#166534">PASS</text>
+<rect x="1032" y="892" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="904" fill="#78716c">—</text>
+<rect class="row-band" x="24" y="912" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="928">35  staging-environment-validates</text>
+<rect x="408" y="916" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="928" fill="#166534">PASS</text>
+<rect x="564" y="916" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="928" fill="#78716c">—</text>
+<rect x="720" y="916" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="928" fill="#78716c">—</text>
+<rect x="876" y="916" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="928" fill="#92400e">PART</text>
+<rect x="1032" y="916" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="928" fill="#78716c">—</text>
+<rect class="row-band-alt" x="24" y="936" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="952">36  dev-environment-validates</text>
+<rect x="408" y="940" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="952" fill="#166534">PASS</text>
+<rect x="564" y="940" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="638" y="952" fill="#78716c">—</text>
+<rect x="720" y="940" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="952" fill="#78716c">—</text>
+<rect x="876" y="940" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="952" fill="#92400e">PART</text>
+<rect x="1032" y="940" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="952" fill="#78716c">—</text>
+<rect class="row-band" x="24" y="960" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="976">37  execution-failure-with-error-code</text>
+<rect x="408" y="964" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="976" fill="#166534">PASS</text>
+<rect x="564" y="964" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="638" y="976" fill="#92400e">PART</text>
+<rect x="720" y="964" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="976" fill="#78716c">—</text>
+<rect x="876" y="964" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="976" fill="#166534">PASS</text>
+<rect x="1032" y="964" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="1106" y="976" fill="#166534">PASS</text>
+<rect class="row-band-alt" x="24" y="984" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="1000">38  approval-without-context</text>
+<rect x="408" y="988" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="1000" fill="#166534">PASS</text>
+<rect x="564" y="988" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="1000" fill="#166534">PASS</text>
+<rect x="720" y="988" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="794" y="1000" fill="#92400e">PART</text>
+<rect x="876" y="988" width="148" height="16" rx="3" fill="#fef3c7"/>
+<text class="verdict" x="950" y="1000" fill="#92400e">PART</text>
+<rect x="1032" y="988" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="1000" fill="#78716c">—</text>
+<rect class="row-band" x="24" y="1008" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="1024">39  nested-arguments-canonical</text>
+<rect x="408" y="1012" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="1024" fill="#166534">PASS</text>
+<rect x="564" y="1012" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="1024" fill="#166534">PASS</text>
+<rect x="720" y="1012" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="1024" fill="#78716c">—</text>
+<rect x="876" y="1012" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="1024" fill="#166534">PASS</text>
+<rect x="1032" y="1012" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="1024" fill="#78716c">—</text>
+<rect class="row-band-alt" x="24" y="1032" width="1132" height="24"/>
+<text class="fg scenario-name" x="28" y="1048">40  large-arguments-validate</text>
+<rect x="408" y="1036" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="482" y="1048" fill="#166534">PASS</text>
+<rect x="564" y="1036" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="638" y="1048" fill="#166534">PASS</text>
+<rect x="720" y="1036" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="794" y="1048" fill="#78716c">—</text>
+<rect x="876" y="1036" width="148" height="16" rx="3" fill="#dcfce7"/>
+<text class="verdict" x="950" y="1048" fill="#166534">PASS</text>
+<rect x="1032" y="1036" width="148" height="16" rx="3" fill="#f5f5f4"/>
+<text class="verdict" x="1106" y="1048" fill="#78716c">—</text>
+<text class="muted col-header" x="24" y="1082">verdict tally</text>
+<text class="tally-label" x="24" y="1096" fill="#15803d">PASS</text>
+<text class="fg tally-num" x="482" y="1096">40</text>
+<text class="fg tally-num" x="638" y="1096">12</text>
+<text class="fg tally-num" x="794" y="1096">5</text>
+<text class="fg tally-num" x="950" y="1096">15</text>
+<text class="fg tally-num" x="1106" y="1096">17</text>
+<text class="tally-label" x="24" y="1110" fill="#b45309">PARTIAL</text>
+<text class="fg tally-num" x="482" y="1110">0</text>
+<text class="fg tally-num" x="638" y="1110">9</text>
+<text class="fg tally-num" x="794" y="1110">7</text>
+<text class="fg tally-num" x="950" y="1110">14</text>
+<text class="fg tally-num" x="1106" y="1110">5</text>
+<text class="tally-label" x="24" y="1124" fill="#4f46e5">DOCS-ONLY</text>
+<text class="fg tally-num" x="482" y="1124">0</text>
+<text class="fg tally-num" x="638" y="1124">3</text>
+<text class="fg tally-num" x="794" y="1124">1</text>
+<text class="fg tally-num" x="950" y="1124">1</text>
+<text class="fg tally-num" x="1106" y="1124">1</text>
+<text class="tally-label" x="24" y="1138" fill="#78716c">NOT COVERED</text>
+<text class="fg tally-num" x="482" y="1138">0</text>
+<text class="fg tally-num" x="638" y="1138">14</text>
+<text class="fg tally-num" x="794" y="1138">25</text>
+<text class="fg tally-num" x="950" y="1138">8</text>
+<text class="fg tally-num" x="1106" y="1138">15</text>
+<text class="tally-label" x="24" y="1152" fill="#a8a29e">N/A</text>
+<text class="fg tally-num" x="482" y="1152">0</text>
+<text class="fg tally-num" x="638" y="1152">2</text>
+<text class="fg tally-num" x="794" y="1152">2</text>
+<text class="fg tally-num" x="950" y="1152">2</text>
+<text class="fg tally-num" x="1106" y="1152">2</text>
+<text class="muted col-header" x="24" y="1198">legend</text>
+<rect x="24" y="1208" width="40" height="14" rx="2" fill="#dcfce7"/>
+<text class="verdict" x="44" y="1219" fill="#166534">PASS</text>
+<text class="muted legend" x="72" y="1219">vendor artifact carries the field; check passes</text>
+<rect x="544" y="1208" width="40" height="14" rx="2" fill="#fef3c7"/>
+<text class="verdict" x="564" y="1219" fill="#92400e">PART</text>
+<text class="muted legend" x="592" y="1219">vendor handles the lifecycle; artifact missing required structure</text>
+<rect x="24" y="1222" width="40" height="14" rx="2" fill="#e0e7ff"/>
+<text class="verdict" x="44" y="1233" fill="#3730a3">DOCS</text>
+<text class="muted legend" x="72" y="1233">described in docs; cannot be verified from a portable artifact</text>
+<rect x="544" y="1222" width="40" height="14" rx="2" fill="#f5f5f4"/>
+<text class="verdict" x="564" y="1233" fill="#78716c">—</text>
+<text class="muted legend" x="592" y="1233">no equivalent in the vendor's normative schema</text>
+<rect x="24" y="1236" width="40" height="14" rx="2" fill="#fafaf9"/>
+<text class="verdict" x="44" y="1247" fill="#a8a29e">N/A</text>
+<text class="muted legend" x="72" y="1247">positive boundary scenario; semantics don't apply</text>
+</svg>

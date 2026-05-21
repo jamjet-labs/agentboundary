@@ -60,17 +60,6 @@ hatch test
 
 89 fast tests cover the schema loader, validator, hashing, conformance checks, runtime, scenarios loader, and CLI. 8 additional slow tests verify the published wheel behaves correctly under a clean install.
 
-## Roadmap (this repo, next 12 weeks)
-
-- W1 (done): schema + worked examples + validator
-- W2 (done): full spec text in `docs/spec/v0.1.md` + threat model + OWASP mapping
-- W3 (done): `agentboundary` CLI runner + first 10 conformance scenarios
-- **W4 (now): public launch — spec, schema, conformance suite, microsite at [agentboundary.jamjet.dev](https://agentboundary.jamjet.dev/)**
-- W5-W6: reference implementation emits valid Action Receipts for a live production action path; conformance suite expands to 25 scenarios (adversarial: stale approval, mutated arguments after approval, replay, unauthorized approver, policy downgrade, missing receipt, receipt tampering)
-- W7-W10: comparative runs mapping the conformance suite onto major agent governance platforms and permission-policy implementations; methodology published before conclusions; right-to-respond windows offered before publication
-- W10: conformance suite freezes at 40 scenarios — v0.1 done
-- W11-W12: comparative report and teardown video
-
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).

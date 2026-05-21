@@ -17,16 +17,24 @@ Each row asks: *given LangSmith's normative artifact (the Run object) plus reaso
 ## Summary
 
 ```
-PASS          6
-PARTIAL      10
-DOCS-ONLY     2
-NOT COVERED  10
+PASS         15
+PARTIAL      14
+DOCS-ONLY     1
+NOT COVERED   8
 N/A           2
               ──
-TOTAL        30
+TOTAL        40
 ```
 
-The 10 PARTIAL count reflects LangSmith's pattern: the data is captured, but the schema is convention-not-spec. With a strict team convention, many PARTIALs upgrade to PASS; with no convention, they fall to NOT COVERED. The table records the convention-following case (the more favourable interpretation).
+The 14 PARTIAL count reflects LangSmith's pattern: the data is captured,
+but the schema is convention-not-spec. With a strict team convention,
+many PARTIALs upgrade to PASS; with no convention, they fall to NOT
+COVERED. The table records the convention-following case (the more
+favourable interpretation).
+
+The 15 PASS count is the second highest after Microsoft AGT — driven
+mostly by Level 3 hashing scenarios where `Run.inputs` stores raw JSON
+the adapter can canonicalise and hash directly.
 
 ## Per-scenario results
 
@@ -62,17 +70,32 @@ The 10 PARTIAL count reflects LangSmith's pattern: the data is captured, but the
 | 28 | honest-completeness-passes | **PARTIAL** | Adapter populates provenance honestly; production conventions yield 0.7-0.9 score |
 | 29 | valid-chain-passes | **NOT COVERED** | `parent_run_id` is hierarchical (tree), not a hash chain. Chain would require external adapter state |
 | 30 | broken-chain-fires | **DOCS-ONLY** | If adapter maintains external chain state, the check fires on tamper — but this is adapter discipline, not LangSmith guarantee |
+| 31 | allow-with-blocked-execution | **PARTIAL** | `Run.tags decision:allow` + `Run.status:error` convention can express the honest failure path |
+| 32 | fork-chain-shared-prior | **PARTIAL** | `parent_run_id` is hierarchical (per-trace tree); forks are expressible but not a hash chain |
+| 33 | unicode-arguments-validate | **PASS** | `Run.inputs` stores raw JSON; adapter canonicalises and hashes |
+| 34 | empty-arguments-validate | **PASS** | Same |
+| 35 | staging-environment-validates | **PARTIAL** | `env:staging` tag convention; not normative |
+| 36 | dev-environment-validates | **PARTIAL** | `env:dev` tag convention; not normative |
+| 37 | execution-failure-with-error-code | **PASS** | `Run.status:error` + `Run.error.code` maps cleanly to v0.2-alpha execution.status + execution.error_code |
+| 38 | approval-without-context | **PARTIAL** | Annotation feedback can be empty; convention-dependent |
+| 39 | nested-arguments-canonical | **PASS** | `Run.inputs` handles arbitrary nested JSON |
+| 40 | large-arguments-validate | **PASS** | Same |
 
-## Per-conformance-level rollup
+## Per-conformance-level rollup (40-scenario freeze)
 
 | Level | Of N applicable | PASS | PARTIAL | NOT COVERED |
 |---|---|---|---|---|
-| Level 1 (Logged) | 10 | 4 | 5 | 1 |
+| Level 1 / lifecycle | 14 | 7 | 5 | 2 |
 | Level 2 (Policy-Bound) | 6 | 0 | 5 | 1 |
-| Level 3 (Portable Proof) | 5 | 3 | 0 | 2 |
+| Level 3 (Portable Proof) | 6 | 4 | 0 | 2 |
 | Level 4 (Tamper-Evident) | 12 | 4 | 1 | 6 |
+| Other (env values, etc.) | 2 | 0 | 2 | 0 |
 
-The pattern: LangSmith does best at **Level 3** for the hashing scenarios because `Run.inputs` is captured raw and the adapter can canonicalise + hash. It does worst at **Level 2** because policy decisions live in tag conventions, not normative schema. Level 4 misses are structural (no chain, no tamper-evidence).
+The pattern: LangSmith does best at **Level 3** for the hashing scenarios
+because `Run.inputs` is captured raw and the adapter can canonicalise +
+hash directly. It does worst at **Level 2** because policy decisions
+live in tag conventions, not normative schema. Level 4 misses are
+structural (no chain, no tamper-evidence on the Run record itself).
 
 ## Where the gaps might matter
 

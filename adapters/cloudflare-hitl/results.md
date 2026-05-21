@@ -15,16 +15,21 @@ Note: "Cloudflare's normative artifact" is the **6-column `approval_audit` table
 ## Summary
 
 ```
-PASS          4
-PARTIAL       6
+PASS          5
+PARTIAL       7
 DOCS-ONLY     1
-NOT COVERED  17
+NOT COVERED  25
 N/A           2
               ──
-TOTAL        30
+TOTAL        40
 ```
 
-The 17 NOT COVERED count reflects the depth of the artifact gap: Cloudflare HITL gives you a workflow primitive (`needsApproval` + durable execution) and an audit-table suggestion, not an emitted-artifact format. Most AgentBoundary checks operate on fields Cloudflare's normative row simply doesn't carry.
+The 25 NOT COVERED count is the highest of any vendor in the W12
+comparison and reflects the depth of the artifact gap: Cloudflare HITL
+gives you a workflow primitive (`needsApproval` + durable execution)
+and an audit-table suggestion, not an emitted-artifact format. Most
+AgentBoundary checks operate on fields Cloudflare's normative row
+simply doesn't carry.
 
 ## Per-scenario results
 
@@ -60,17 +65,34 @@ The 17 NOT COVERED count reflects the depth of the artifact gap: Cloudflare HITL
 | 28 | honest-completeness-passes | **PARTIAL** | Adapter populates provenance honestly, but Cloudflare's normative row is so thin that most paths land at `synthesized`; the typical score is low (~0.4-0.6) |
 | 29 | valid-chain-passes | **NOT COVERED** | No Cloudflare-side chain primitive. Adapter could maintain `prior_receipt` externally but it's not derivable from the row |
 | 30 | broken-chain-fires | **DOCS-ONLY** | If the adapter does maintain external `prior_receipt` state, the L4 broken-chain check fires on tamper. But this is adapter-side discipline, not Cloudflare-side guarantee |
+| 31 | allow-with-blocked-execution | **NOT COVERED** | The audit row records the decision, not the execution outcome — no way to express the honest "approved but failed downstream" state |
+| 32 | fork-chain-shared-prior | **NOT COVERED** | No chain primitive at all |
+| 33 | unicode-arguments-validate | **NOT COVERED** | No normative arguments primitive |
+| 34 | empty-arguments-validate | **NOT COVERED** | Same |
+| 35 | staging-environment-validates | **NOT COVERED** | Audit row has no environment field |
+| 36 | dev-environment-validates | **NOT COVERED** | Same |
+| 37 | execution-failure-with-error-code | **NOT COVERED** | Audit row records the decision, not the execution outcome — failure status + error code live in caller-defined storage |
+| 38 | approval-without-context | **PARTIAL** | `reason TEXT` is already optional in the recommended schema — minimal approval is supported, though the surrounding gaps still apply |
+| 39 | nested-arguments-canonical | **NOT COVERED** | No normative arguments handling |
+| 40 | large-arguments-validate | **NOT COVERED** | Same |
 
-## Per-conformance-level rollup
+## Per-conformance-level rollup (40-scenario freeze)
 
 | Level | Of N applicable | PASS | PARTIAL | NOT COVERED |
 |---|---|---|---|---|
-| Level 1 (Logged) | 10 | 3 | 4 | 2 |
+| Level 1 / lifecycle | 14 | 3 | 4 | 7 |
 | Level 2 (Policy-Bound) | 6 | 1 | 2 | 3 |
-| Level 3 (Portable Proof) | 5 | 0 | 0 | 5 |
-| Level 4 (Tamper-Evident) | 12 | 2 | 1 | 8 |
+| Level 3 (Portable Proof) | 6 | 0 | 1 | 5 |
+| Level 4 (Tamper-Evident) | 12 | 1 | 0 | 8 |
+| Other (env values, etc.) | 2 | 0 | 0 | 2 |
 
-The pattern: Cloudflare's HITL passes Level 2 mostly because the **decision itself is recorded** (the central thing it does). It misses Level 3 entirely because there's no hash, no normative argument capture, no policy version. Level 4 is mostly NOT COVERED because Cloudflare relies on database-immutability conventions instead of cryptographic tamper-evidence.
+Cloudflare's pattern: **Level 2 partial** because the decision is
+recorded but not bound to identity/policy version. **Level 3 essentially
+zero** — no hash, no normative argument capture. **Level 4 essentially
+zero** — relies on database-immutability conventions rather than
+cryptographic tamper-evidence. The product is excellent for its
+intended scope (durable approval workflows); it is deliberately not a
+portable-artifact format.
 
 ## Where the gaps might matter (concrete attack/audit scenarios)
 

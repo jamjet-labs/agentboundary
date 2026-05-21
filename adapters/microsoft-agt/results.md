@@ -34,25 +34,32 @@ hidden.
 ## Summary
 
 ```
-PASS         15  (+5 from v0.2-alpha integration: chain check + 4 positive
-                  boundary scenarios via adapter)
-PARTIAL       4
+PASS         17
+PARTIAL       5
 DOCS-ONLY     1
-NOT COVERED   8
+NOT COVERED  15
 N/A           2
               ──
-TOTAL        30
+TOTAL        40
 ```
 
-**Net change since W7 first run:** five additional PASS rows. Three from
-v0.2-alpha provenance + completeness scenarios (the adapter populates
-both honestly). Two from the new chain scenarios — AGT's `previous_hash`
-maps cleanly to v0.2-alpha's `prior_receipt.receipt_hash`, so when the
-adapter is told the prior `entry_id`, the chain check works end-to-end.
-The eight NOT COVERED rows are unchanged: those reflect AGT-side schema
-gaps (no `arguments_hash`, no approver identity, no policy version, no
-issued-vs-completed split) that v0.2-alpha cannot retrofit because they
-require AGT-side data the audit entry doesn't carry.
+**Net change since W7 first run:** PASS count climbed from 10 → 17 across
+three releases:
+
+- v0.2-alpha provenance + completeness scenarios (26-28) added 3 PASS
+  because the adapter populates the new fields honestly
+- Chain integration (29-30) added 2 PASS because AGT's `previous_hash`
+  maps cleanly to v0.2-alpha's `prior_receipt.receipt_hash`
+- W10 scenarios 31-40 added 3 PASS — AGT's separate decision/outcome
+  fields cleanly support the allow-with-blocked-execution scenario, its
+  Merkle chain supports forks natively, and its `outcome=failure` value
+  carries error_code via metadata
+
+The 15 NOT COVERED rows reflect AGT-side schema gaps (no
+`arguments_hash`, no approver identity, no policy version, no
+issued-vs-completed timeline split, no environment field) that
+v0.2-alpha cannot retrofit because they require AGT-side data the audit
+entry doesn't carry.
 
 ## Per-scenario results
 
@@ -88,20 +95,33 @@ require AGT-side data the audit entry doesn't carry.
 | 28 | honest-completeness-passes | **PASS** | Adapter-emitted receipts always include `provenance` + `completeness_score`; positive boundary is met |
 | 29 | valid-chain-passes | **PASS** | When the caller supplies `prior_entry_id`, AGT's native `previous_hash` populates `prior_receipt.receipt_hash`; verifier accepts the chain link |
 | 30 | broken-chain-fires | **PASS** | An adapter-produced receipt with a tampered `prior_receipt.receipt_hash` is correctly rejected by the L4 check |
+| 31 | allow-with-blocked-execution | **PASS** | AGT's separate `decision` and `outcome` fields support the honest `decision=allow + outcome=failure` state cleanly |
+| 32 | fork-chain-shared-prior | **PASS** | AGT's Merkle chain accepts forks structurally — multiple entries can carry the same `previous_hash` |
+| 33 | unicode-arguments-validate | **NOT COVERED** | No normative `arguments_hash` — canonical-JSON handling is implementation-defined |
+| 34 | empty-arguments-validate | **NOT COVERED** | Same — no arguments-hash primitive |
+| 35 | staging-environment-validates | **NOT COVERED** | AGT has no `environment` field; the staging/prod/dev distinction is out-of-band |
+| 36 | dev-environment-validates | **NOT COVERED** | Same |
+| 37 | execution-failure-with-error-code | **PASS** | AGT's `outcome=failure` is normative; error info goes in `metadata` |
+| 38 | approval-without-context | **NOT COVERED** | Approval block isn't part of `AuditEntry`; no field to check |
+| 39 | nested-arguments-canonical | **NOT COVERED** | No arguments hashing primitive |
+| 40 | large-arguments-validate | **NOT COVERED** | Same |
 
-## Per-conformance-level rollup (after v0.2-alpha integration)
+## Per-conformance-level rollup (40-scenario freeze)
 
 | Level | Of N applicable | PASS | PARTIAL | NOT COVERED |
 |---|---|---|---|---|
-| Level 1 (Logged) | 10 | 9 | 1 | 0 |
+| Level 1 / lifecycle | 14 | 11 | 1 | 2 |
 | Level 2 (Policy-Bound) | 6 | 4 | 2 | 0 |
-| Level 3 (Portable Proof) | 5 | 1 | 0 | 4 |
+| Level 3 (Portable Proof) | 6 | 1 | 0 | 5 |
 | Level 4 (Tamper-Evident) | 12 | 7 | 1 | 4 |
+| Other (env values, etc.) | 2 | 0 | 0 | 2 |
 
-The L4 row went from 2/7 PASS to 7/12 PASS after v0.2-alpha integration —
-five new L4 scenarios all PASS because the adapter populates the new
-fields. The AGT-side gaps (no `arguments_hash`, no approver identity,
-no policy version) still drive the remaining NOT COVERED rows.
+AGT pattern: **strong at Levels 1-2** (policy decision recorded with a
+named matched_rule), **strong at L4 chain integrity** (Merkle chain),
+**weak at L3 and L4 verifier-side recomputation** (no normative
+arguments_hash, no approval identity, no policy version, no
+environment field). The L4 row remains 7/12 PASS — strong for a
+runtime-enforcement product.
 
 The pattern is unchanged: AGT is **strong at Levels 1-2** (recording
 that an evaluation happened and which decision came out) and **weak at

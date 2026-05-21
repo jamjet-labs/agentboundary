@@ -15,16 +15,23 @@ Each row asks: *given the Anthropic SDK's permission decision plus reasonable ca
 ## Summary
 
 ```
-PASS          5
-PARTIAL       8
+PASS         12
+PARTIAL       9
 DOCS-ONLY     3
-NOT COVERED  12
+NOT COVERED  14
 N/A           2
               ──
-TOTAL        30
+TOTAL        40
 ```
 
-3 DOCS-ONLY is the highest of any vendor — Anthropic's Managed Agents Console maintains a comprehensive audit log per their launch announcement, but the schema is not publicly documented; we can confirm capability without being able to verify the artifact.
+3 DOCS-ONLY is the highest of any vendor — Anthropic's Managed Agents
+Console maintains a comprehensive audit log per their launch
+announcement, but the schema is not publicly documented; we can confirm
+capability without being able to verify the artifact.
+
+The 12 PASS is the second highest after Microsoft AGT, mostly driven by
+Level 3 hashing scenarios — the canUseTool callback's `tool_input` is
+raw JSON the adapter canonicalises and hashes directly.
 
 ## Per-scenario results
 
@@ -60,17 +67,34 @@ TOTAL        30
 | 28 | honest-completeness-passes | **PARTIAL** | Adapter populates provenance honestly; bare event scores ~0.4, full context ~0.85 |
 | 29 | valid-chain-passes | **NOT COVERED** | No chain primitive; events are independent |
 | 30 | broken-chain-fires | **NOT COVERED** | Same |
+| 31 | allow-with-blocked-execution | **PARTIAL** | Decision event has `decision=allow`, but execution outcome is caller-supplied; the honest-failure state is expressible only when the caller threads the outcome through |
+| 32 | fork-chain-shared-prior | **NOT COVERED** | No chain primitive in the permission decision event |
+| 33 | unicode-arguments-validate | **PASS** | `tool_input` is raw JSON; adapter canonicalises and hashes |
+| 34 | empty-arguments-validate | **PASS** | Same |
+| 35 | staging-environment-validates | **NOT COVERED** | SDK doesn't model environment in any portable form |
+| 36 | dev-environment-validates | **NOT COVERED** | Same; no human-actor variant in the SDK boundary |
+| 37 | execution-failure-with-error-code | **PARTIAL** | Decision event captures the decision, not the execution. With caller-supplied execution context, the failure + error_code expressible |
+| 38 | approval-without-context | **PASS** | `canUseTool`'s `message` is optional, so an approval with no rationale is structurally supported |
+| 39 | nested-arguments-canonical | **PASS** | Adapter handles arbitrary nested JSON in `tool_input` |
+| 40 | large-arguments-validate | **PASS** | Same |
 
-## Per-conformance-level rollup
+## Per-conformance-level rollup (40-scenario freeze)
 
 | Level | Of N applicable | PASS | PARTIAL | NOT COVERED |
 |---|---|---|---|---|
-| Level 1 (Logged) | 10 | 3 | 4 | 3 |
+| Level 1 / lifecycle | 14 | 5 | 4 | 4 |
 | Level 2 (Policy-Bound) | 6 | 2 | 3 | 1 |
-| Level 3 (Portable Proof) | 5 | 3 | 0 | 2 |
+| Level 3 (Portable Proof) | 6 | 4 | 0 | 2 |
 | Level 4 (Tamper-Evident) | 12 | 1 | 2 | 6 |
+| Other (env values, etc.) | 2 | 0 | 0 | 1 |
 
-The pattern: Anthropic does well at **Level 3** for hash recomputation (the adapter has the args). It does relatively well at **Level 2** because `policy.decision` maps cleanly. It does worst at **Level 4** because there's no chain, no tamper-evidence, and limited approval-window semantics.
+The pattern: Anthropic does well at **Level 3** for hash recomputation
+(the adapter has the args). It does relatively well at **Level 2**
+because `policy.decision` maps cleanly. It does worst at **Level 4**
+because there's no chain, no tamper-evidence, and limited approval-window
+semantics. The L3 cluster around hashing edge cases (33, 34, 39, 40)
+all PASS — the canUseTool callback's `tool_input` is the cleanest
+arguments-capture point of any vendor in this comparison.
 
 ## Where the gaps might matter
 

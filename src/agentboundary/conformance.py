@@ -375,6 +375,40 @@ def _level_4_checks(
                     )
                 )
 
+    # Decision/execution consistency: a deny or escalate decision must not
+    # report a successful execution. Spec §3.3/§3.5 says non-allow paths
+    # emit execution.status=blocked. A receipt with policy.decision=deny
+    # and execution.status=success is either a broken runtime that ignored
+    # the policy or a forgery.
+    policy_decision = (receipt.get("policy") or {}).get("decision")
+    execution_status = (receipt.get("execution") or {}).get("status")
+    if policy_decision == "deny" and execution_status == "success":
+        out.append(
+            ConformanceCheck(
+                level=4,
+                code="LEVEL_4_DENY_EXECUTED",
+                severity="fail",
+                message=(
+                    "policy.decision=deny but execution.status=success; "
+                    "the action ran despite policy denial"
+                ),
+                field="execution.status",
+            )
+        )
+    if policy_decision == "escalate" and execution_status == "success":
+        out.append(
+            ConformanceCheck(
+                level=4,
+                code="LEVEL_4_ESCALATE_EXECUTED",
+                severity="fail",
+                message=(
+                    "policy.decision=escalate but execution.status=success "
+                    "without an approval block resolving the escalation"
+                ),
+                field="execution.status",
+            )
+        )
+
     # Policy-downgrade: receipt's (policy.name, policy.version) must be a
     # tuple the verifier accepts. Spec §5.4 mandates this for L4 to defend
     # against an agent claiming an older policy version that would have

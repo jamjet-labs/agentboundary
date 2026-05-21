@@ -1,0 +1,36 @@
+name: 20-numeric-arguments-validate
+description: |
+  Arguments object contains numbers, booleans, and null. arguments_hash
+  must canonicalise these correctly so a verifier with the same arguments
+  recomputes the same digest.
+setup:
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: allow
+      capabilities: [spring.service.mutation]
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments:
+    claim_id: 789
+    payout_cents: 4200
+    fraud_score: 0.0042
+    requires_review: false
+    rejection_reason: null
+    line_items:
+      - { sku: ABC-1, qty: 3, price: 19.99 }
+      - { sku: XYZ-9, qty: 1, price: 4.99 }
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true

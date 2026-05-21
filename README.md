@@ -2,7 +2,7 @@
 
 > An open spec and conformance suite for proving AI-initiated production actions.
 
-![AgentBoundary v0.1 conformance suite — 15 passed · 0 failed](docs/assets/conformance-matrix.svg)
+![AgentBoundary v0.1 conformance suite — 25 passed · 0 failed](docs/assets/conformance-matrix.svg)
 
 ```bash
 npx agentboundary run scenarios/
@@ -10,7 +10,7 @@ npx agentboundary run scenarios/
 uvx agentboundary run scenarios/
 ```
 
-15 scenarios, 60 seconds, no signup, no Docker.
+25 scenarios, 60 seconds, no signup, no Docker.
 
 ## The problem AgentBoundary solves
 
@@ -47,7 +47,7 @@ This is `docs/receipts/github-merge.json` verbatim. The `receipt_hash` is the ca
 - [`docs/spec/owasp-mapping.md`](docs/spec/owasp-mapping.md) — OWASP LLM Top 10 risks mapped to AgentBoundary conformance levels
 - [`docs/schemas/action-receipt-v0.1.json`](docs/schemas/action-receipt-v0.1.json) — Action Receipt JSON Schema (normative source for receipt syntax)
 - [`docs/receipts/`](docs/receipts/README.md) — three worked example receipts (GitHub merge, Spring service mutation, Stripe refund); each one's `receipt_hash` verifies under the spec
-- [`scenarios/`](scenarios/) — 15 deterministic conformance scenarios driven by `agentboundary run` (10 lifecycle + 5 adversarial Level 4)
+- [`scenarios/`](scenarios/) — 25 deterministic conformance scenarios driven by `agentboundary run` (10 lifecycle + 7 adversarial Level 4 + 8 positive boundary / hashing / schema)
 - [`src/agentboundary/`](src/agentboundary/) — Python reference implementation (validator, hashing, runtime, CLI)
 - [`npm/`](npm/) — thin Node wrapper that dispatches to `uvx`, `pipx`, or `python3 -m agentboundary`
 
@@ -58,7 +58,7 @@ pip install hatch
 hatch test
 ```
 
-106 fast tests cover the schema loader, validator, hashing, conformance checks (Levels 1-4), runtime, scenarios loader, and CLI. 8 additional slow tests verify the published wheel behaves correctly under a clean install.
+118 fast tests cover the schema loader, validator, hashing, conformance checks (Levels 1-4), runtime, scenarios loader, and CLI. 8 additional slow tests verify the published wheel behaves correctly under a clean install.
 
 ## License
 

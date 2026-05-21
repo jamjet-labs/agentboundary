@@ -1,0 +1,36 @@
+name: 17-approval-inside-window
+description: |
+  Positive boundary case. Approval is well-formed with approved_at well
+  inside the policy's approval_max_age_seconds window. Level 4 must NOT
+  emit LEVEL_4_STALE_APPROVAL.
+setup:
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+      approval_max_age_seconds: 31536000
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2026-01-01T00:00:00Z"
+      context: { ticket: ACME-1287 }
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true

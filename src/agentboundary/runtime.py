@@ -212,6 +212,9 @@ def _apply_inject(receipt: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]
     kind = op["op"]
     if kind == "omit_field":
         _delete_path(receipt, op["path"])
+        if op.get("recompute_hash"):
+            receipt.pop("receipt_hash", None)
+            receipt["receipt_hash"] = compute_receipt_hash(receipt)
         return receipt
     if kind == "mutate_field":
         _set_path(receipt, op["path"], op["value"])

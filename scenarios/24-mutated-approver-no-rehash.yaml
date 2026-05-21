@@ -1,0 +1,42 @@
+name: 24-mutated-approver-no-rehash
+description: |
+  Receipt is emitted with a valid approval block, then approval.approver.id
+  is swapped to a different identity without recomputing receipt_hash.
+  Level 3 catches the tamper via LEVEL_3_RECEIPT_HASH_MISMATCH — the hash
+  covers every field, including the approval block.
+setup:
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+        - { id: "user:cto@acme", type: human }
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2026-06-15T14:22:30Z"
+      context: { ticket: ACME-1287 }
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+  inject:
+    - op: mutate_field
+      path: approval.approver.id
+      value: "user:cto@acme"
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_3_RECEIPT_HASH_MISMATCH"]

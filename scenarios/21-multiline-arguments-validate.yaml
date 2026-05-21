@@ -1,0 +1,36 @@
+name: 21-multiline-arguments-validate
+description: |
+  Arguments contain multiline strings with unicode codepoints. The
+  canonical-JSON encoder must serialise these byte-stable so the
+  arguments_hash matches independent recomputation.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.issues.create]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-rest, version: "2022-11-28", capability: github.issues.create }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: jamjet-labs/agentboundary
+  arguments:
+    title: "Bug: — dash and emoji \U0001F525 in title"
+    body: |
+      Multi-line issue body.
+
+      Includes:
+      - Unicode: café · naïve · résumé · 北京
+      - Quotes: "she said" and 'they replied'
+      - Backslash: C:\Users\agent
+expect:
+  decision: allow
+  conformance_level: 3
+  receipt_must_validate: true

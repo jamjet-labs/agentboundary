@@ -1,0 +1,40 @@
+name: 16-deny-with-execution-success
+description: |
+  Policy denies the action but the receipt claims execution.status=success.
+  Either the runtime ignored the deny and ran anyway, or the receipt is
+  forged. Level 4 catches the contradiction via LEVEL_4_DENY_EXECUTED.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: deny
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+  inject:
+    - op: mutate_field
+      path: execution.status
+      value: success
+    - op: mutate_field
+      path: execution.result_ref
+      value: "github://issues/forged-99"
+    - op: mutate_field
+      path: execution.completed_at
+      value: "2026-06-15T14:23:09Z"
+      recompute_hash: true
+expect:
+  decision: deny
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_4_DENY_EXECUTED"]

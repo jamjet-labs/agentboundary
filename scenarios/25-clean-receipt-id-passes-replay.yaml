@@ -1,0 +1,31 @@
+name: 25-clean-receipt-id-passes-replay
+description: |
+  Positive boundary case for replay detection. Receipt has a fresh
+  receipt_id and the verifier's prior_receipt_ids set contains
+  unrelated UUIDs. Level 4 must NOT emit LEVEL_4_RECEIPT_ID_REPLAY.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+  prior_receipt_ids:
+    - "00000000-0000-0000-0000-000000000000"
+    - "11111111-1111-4111-8111-111111111111"
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true

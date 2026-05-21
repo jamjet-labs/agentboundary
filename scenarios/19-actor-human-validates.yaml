@@ -1,0 +1,33 @@
+name: 19-actor-human-validates
+description: |
+  Human-initiated action under policy gating — same lifecycle as
+  agent-initiated actions, schema accepts actor.type=human, all
+  conformance checks pass.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+action:
+  actor:
+    type: human
+    id: "user:alice@acme"
+    display_name: "Alice Ng"
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  assertions:
+    - { field: actor.type, equals: human }

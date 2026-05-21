@@ -269,6 +269,26 @@ class TestLevel4:
         codes = {(c.code, c.severity) for c in checks}
         assert ("LEVEL_4_SKIPPED_NO_POLICY_STORE", "info") in codes
 
+    def test_l4_deny_executed_contradiction(self, minimal_l3_receipt: dict) -> None:
+        receipt = deepcopy(minimal_l3_receipt)
+        receipt["policy"]["decision"] = "deny"
+        # execution.status stays "success" — the contradictory state
+        receipt.pop("receipt_hash", None)
+        receipt["receipt_hash"] = compute_receipt_hash(receipt)
+        checks = check_conformance(receipt, level=4, arguments={"x": 1})
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_DENY_EXECUTED" in codes
+
+    def test_l4_escalate_executed_contradiction(self, minimal_l3_receipt: dict) -> None:
+        receipt = deepcopy(minimal_l3_receipt)
+        receipt["policy"]["decision"] = "escalate"
+        # execution.status stays "success" without an approval block
+        receipt.pop("receipt_hash", None)
+        receipt["receipt_hash"] = compute_receipt_hash(receipt)
+        checks = check_conformance(receipt, level=4, arguments={"x": 1})
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_ESCALATE_EXECUTED" in codes
+
     def test_l4_skip_does_not_fire_when_context_supplied(
         self, receipt_with_approval: dict
     ) -> None:

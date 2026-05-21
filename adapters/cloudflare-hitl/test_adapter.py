@@ -130,8 +130,6 @@ def test_l3_passes_with_full_context() -> None:
 def test_l4_completeness_below_threshold_fires_on_thin_row() -> None:
     """A verifier with a quality bar rejects bare-row Cloudflare receipts."""
     receipt = cloudflare_audit_to_receipt(_row())
-    checks = check_conformance(
-        receipt, level=4, arguments={}, minimum_completeness=0.7
-    )
+    checks = check_conformance(receipt, level=4, arguments={}, minimum_completeness=0.7)
     codes = {c.code for c in checks if c.severity == "fail"}
     assert "LEVEL_4_COMPLETENESS_BELOW_THRESHOLD" in codes

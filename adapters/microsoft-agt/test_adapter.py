@@ -70,9 +70,7 @@ def test_default_output_is_v02_alpha() -> None:
 
 
 def test_v01_opt_out_skips_provenance() -> None:
-    receipt = agt_entry_to_receipt(
-        _agt_allow_entry(), schema_version="agentboundary/v0.1"
-    )
+    receipt = agt_entry_to_receipt(_agt_allow_entry(), schema_version="agentboundary/v0.1")
     assert receipt["version"] == "agentboundary/v0.1"
     assert "provenance" not in receipt
     assert "completeness_score" not in receipt

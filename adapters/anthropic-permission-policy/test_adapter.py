@@ -116,12 +116,8 @@ def test_updated_input_drives_arguments_hash() -> None:
     r_original = anthropic_event_to_receipt(original_event)
     r_updated = anthropic_event_to_receipt(updated_event)
 
-    assert r_original["arguments_hash"] == compute_arguments_hash(
-        original_event["tool_input"]
-    )
-    assert r_updated["arguments_hash"] == compute_arguments_hash(
-        updated_event["updated_input"]
-    )
+    assert r_original["arguments_hash"] == compute_arguments_hash(original_event["tool_input"])
+    assert r_updated["arguments_hash"] == compute_arguments_hash(updated_event["updated_input"])
     assert r_original["arguments_hash"] != r_updated["arguments_hash"]
 
 
@@ -132,9 +128,7 @@ def test_bare_event_completeness_score_is_low() -> None:
 
 
 def test_full_context_completeness_score_is_high() -> None:
-    receipt = anthropic_event_to_receipt(
-        _ask_via_callback(), context=_full_context()
-    )
+    receipt = anthropic_event_to_receipt(_ask_via_callback(), context=_full_context())
     score = receipt["completeness_score"]
     assert score > 0.8, f"full-context score should be high; got {score}"
 
@@ -155,9 +149,7 @@ def test_completeness_score_matches_recomputed() -> None:
 def test_l3_passes_with_args_provided() -> None:
     event = _allow_via_rule()
     receipt = anthropic_event_to_receipt(event)
-    checks = check_conformance(
-        receipt, level=3, arguments=event["tool_input"]
-    )
+    checks = check_conformance(receipt, level=3, arguments=event["tool_input"])
     fails = [c for c in checks if c.severity == "fail"]
     assert fails == [], f"L3 failures: {[(c.code, c.message) for c in fails]}"
 

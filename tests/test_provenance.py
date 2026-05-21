@@ -6,7 +6,7 @@ from copy import deepcopy
 
 import pytest
 
-from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
+from agentboundary.hashing import compute_arguments_hash
 from agentboundary.provenance import (
     ALL_PROVENANCE_PATHS,
     applicable_paths,
@@ -42,28 +42,51 @@ def minimal_v02_receipt() -> dict:
 @pytest.fixture
 def all_observed_provenance() -> dict:
     """Provenance that marks every required path as 'observed'."""
-    return {p: "observed" for p in (
-        "receipt_id", "issued_at", "actor.type", "actor.id",
-        "agent.framework", "agent.framework_version", "agent.model",
-        "tool.name", "tool.capability",
-        "target.system", "target.environment",
-        "arguments_hash",
-        "policy.name", "policy.version", "policy.decision",
-        "execution.status", "execution.completed_at",
-    )}
+    return dict.fromkeys(
+        (
+            "receipt_id",
+            "issued_at",
+            "actor.type",
+            "actor.id",
+            "agent.framework",
+            "agent.framework_version",
+            "agent.model",
+            "tool.name",
+            "tool.capability",
+            "target.system",
+            "target.environment",
+            "arguments_hash",
+            "policy.name",
+            "policy.version",
+            "policy.decision",
+            "execution.status",
+            "execution.completed_at",
+        ),
+        "observed",
+    )
 
 
 class TestApplicablePaths:
     def test_required_paths_always_included(self, minimal_v02_receipt: dict) -> None:
         paths = applicable_paths(minimal_v02_receipt)
         for p in (
-            "receipt_id", "issued_at", "actor.type", "actor.id",
-            "agent.framework", "agent.framework_version", "agent.model",
-            "tool.name", "tool.capability",
-            "target.system", "target.environment",
+            "receipt_id",
+            "issued_at",
+            "actor.type",
+            "actor.id",
+            "agent.framework",
+            "agent.framework_version",
+            "agent.model",
+            "tool.name",
+            "tool.capability",
+            "target.system",
+            "target.environment",
             "arguments_hash",
-            "policy.name", "policy.version", "policy.decision",
-            "execution.status", "execution.completed_at",
+            "policy.name",
+            "policy.version",
+            "policy.decision",
+            "execution.status",
+            "execution.completed_at",
         ):
             assert p in paths
 
@@ -80,9 +103,7 @@ class TestApplicablePaths:
         assert "tool.version" in paths
         assert "actor.display_name" in paths
 
-    def test_approval_subpaths_included_when_block_present(
-        self, minimal_v02_receipt: dict
-    ) -> None:
+    def test_approval_subpaths_included_when_block_present(self, minimal_v02_receipt: dict) -> None:
         receipt = deepcopy(minimal_v02_receipt)
         receipt["policy"]["decision"] = "require-approval"
         receipt["approval"] = {
@@ -114,11 +135,11 @@ class TestCompletenessScore:
         self, minimal_v02_receipt: dict
     ) -> None:
         receipt = deepcopy(minimal_v02_receipt)
-        required = [p for p in applicable_paths(receipt)]
+        required = list(applicable_paths(receipt))
         half = len(required) // 2
         receipt["provenance"] = {
-            **{p: "observed" for p in required[:half]},
-            **{p: "inferred" for p in required[half:]},
+            **dict.fromkeys(required[:half], "observed"),
+            **dict.fromkeys(required[half:], "inferred"),
         }
         # observed=2, inferred=1; half each → weighted_sum = 1.5*N; max = 2*N
         # Floor at 3 decimals: 0.764 for 17 paths (8 obs + 9 inf → 25/34 = 0.735)
@@ -130,7 +151,7 @@ class TestCompletenessScore:
         """One inferred + rest observed should produce a small dip below 1.0."""
         receipt = deepcopy(minimal_v02_receipt)
         required = applicable_paths(receipt)
-        provenance = {p: "observed" for p in required}
+        provenance = dict.fromkeys(required, "observed")
         provenance[required[0]] = "inferred"  # one inferred
         receipt["provenance"] = provenance
         # 1 inferred + (N-1) observed in N paths

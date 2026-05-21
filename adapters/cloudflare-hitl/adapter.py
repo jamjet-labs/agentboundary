@@ -205,13 +205,15 @@ def _build_provenance(
         # The adapter generates receipt_id and converts decided_at; both
         # are deterministic transformations of the audit row.
         "receipt_id": "synthesized",  # adapter-generated UUID, not from Cloudflare
-        "issued_at": "inferred",      # derived from decided_at
+        "issued_at": "inferred",  # derived from decided_at
         # Actor: context-supplied if present, else synthesized from workflow_id.
         "actor.type": "observed" if "actor_type" in ctx else "synthesized",
         "actor.id": "observed" if "actor_id" in ctx else "synthesized",
         # Agent: context-supplied if present, else default.
         "agent.framework": "observed" if "agent_framework" in ctx else "synthesized",
-        "agent.framework_version": "observed" if "agent_framework_version" in ctx else "synthesized",
+        "agent.framework_version": "observed"
+        if "agent_framework_version" in ctx
+        else "synthesized",
         "agent.model": "observed" if "agent_model" in ctx else "synthesized",
         # Tool: name comes from context; capability synthesized unless context provides.
         "tool.name": "observed" if "tool_name" in ctx else "synthesized",

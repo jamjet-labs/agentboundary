@@ -139,27 +139,17 @@ def langsmith_run_to_receipt(
         },
         "target": {
             "system": (
-                ctx.get("target_system")
-                or tagmap.get(_TARGET_TAG_PREFIX)
-                or "langsmith.unknown"
+                ctx.get("target_system") or tagmap.get(_TARGET_TAG_PREFIX) or "langsmith.unknown"
             ),
-            "environment": (
-                ctx.get("target_environment")
-                or tagmap.get(_ENV_TAG_PREFIX)
-                or "prod"
-            ),
+            "environment": (ctx.get("target_environment") or tagmap.get(_ENV_TAG_PREFIX) or "prod"),
         },
         "arguments_hash": arguments_hash,
         "policy": {
             "name": (
-                ctx.get("policy_name")
-                or tagmap.get(_POLICY_TAG_PREFIX)
-                or "langsmith.implicit"
+                ctx.get("policy_name") or tagmap.get(_POLICY_TAG_PREFIX) or "langsmith.implicit"
             ),
             "version": (
-                ctx.get("policy_version")
-                or tagmap.get(_POLICY_VERSION_TAG_PREFIX)
-                or "unknown"
+                ctx.get("policy_version") or tagmap.get(_POLICY_VERSION_TAG_PREFIX) or "unknown"
             ),
             "decision": decision,
         },
@@ -192,7 +182,11 @@ def langsmith_run_to_receipt(
 
     # Approval block from feedback_stats / annotations (convention)
     feedback = run.get("feedback_stats") or {}
-    approver_id = feedback.get("approver", {}).get("id") if isinstance(feedback.get("approver"), dict) else None
+    approver_id = (
+        feedback.get("approver", {}).get("id")
+        if isinstance(feedback.get("approver"), dict)
+        else None
+    )
     if approver_id:
         receipt["approval"] = {
             "approver": {"id": approver_id},
@@ -205,7 +199,9 @@ def langsmith_run_to_receipt(
             "receipt_hash": prior_receipt["receipt_hash"],
         }
 
-    receipt["provenance"] = _build_provenance(run, ctx, tagmap, prior_receipt is not None, approver_id)
+    receipt["provenance"] = _build_provenance(
+        run, ctx, tagmap, prior_receipt is not None, approver_id
+    )
     receipt["completeness_score"] = compute_completeness_score(receipt)
     receipt["receipt_hash"] = compute_receipt_hash(receipt)
     return receipt
@@ -319,7 +315,7 @@ def _build_provenance(
 
     if "execution_result_ref" in ctx or extra.get("result_ref"):
         prov["execution.result_ref"] = "observed"
-    elif (run.get("status") == "success"):
+    elif run.get("status") == "success":
         # adapter synthesised a langsmith://runs/<id> ref
         prov["execution.result_ref"] = "synthesized"
 

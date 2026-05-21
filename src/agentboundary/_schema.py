@@ -58,8 +58,7 @@ def load_schema_for_version(version: str) -> dict[str, Any]:
     filename = _SCHEMA_FILES.get(version)
     if filename is None:
         raise ValueError(
-            f"Unknown receipt schema version {version!r}; "
-            f"known versions: {sorted(_SCHEMA_FILES)}"
+            f"Unknown receipt schema version {version!r}; known versions: {sorted(_SCHEMA_FILES)}"
         )
     try:
         resource = resources.files(_BUNDLED_RESOURCE).joinpath(filename)

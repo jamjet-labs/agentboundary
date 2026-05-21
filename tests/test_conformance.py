@@ -148,9 +148,7 @@ class TestLevel4:
     "passed Level 4" and "Level 4 was not checked".
     """
 
-    def test_l4_passes_when_no_adversarial_signals(
-        self, receipt_with_approval: dict
-    ) -> None:
+    def test_l4_passes_when_no_adversarial_signals(self, receipt_with_approval: dict) -> None:
         policy = {
             "name": "p",
             "version": "1",
@@ -297,8 +295,8 @@ class TestLevel4Completeness:
     def v02_allow_receipt(self) -> dict:
         from agentboundary.hashing import (
             compute_arguments_hash as _ah,
-            compute_receipt_hash as _rh,
         )
+
         base = {
             "version": "agentboundary/v0.2-alpha",
             "receipt_id": "0192c8d0-1f2a-7c3e-bf2a-1a4d3f5e6c7b",
@@ -375,15 +373,11 @@ class TestLevel4Completeness:
         codes = {c.code for c in checks if c.severity == "fail"}
         assert "LEVEL_4_COMPLETENESS_BELOW_THRESHOLD" not in codes
         # With minimum: fires
-        checks = check_conformance(
-            receipt, level=4, arguments={"x": 1}, minimum_completeness=0.5
-        )
+        checks = check_conformance(receipt, level=4, arguments={"x": 1}, minimum_completeness=0.5)
         codes = {c.code for c in checks if c.severity == "fail"}
         assert "LEVEL_4_COMPLETENESS_BELOW_THRESHOLD" in codes
 
-    def test_completeness_checks_skipped_for_v01_receipts(
-        self, minimal_l3_receipt: dict
-    ) -> None:
+    def test_completeness_checks_skipped_for_v01_receipts(self, minimal_l3_receipt: dict) -> None:
         """A v0.1 receipt has no completeness_score; the checks must no-op."""
         checks = check_conformance(
             minimal_l3_receipt,
@@ -404,6 +398,8 @@ class TestLevel4Chain:
     ) -> dict:
         from agentboundary.hashing import (
             compute_arguments_hash as _ah,
+        )
+        from agentboundary.hashing import (
             compute_receipt_hash as _rh,
         )
 
@@ -468,18 +464,12 @@ class TestLevel4Chain:
         assert "LEVEL_4_BROKEN_CHAIN" in codes
 
     def test_chain_skipped_when_no_map_supplied(self) -> None:
-        receipt = self._v02_receipt_with_prior(
-            "0192c8d0-1f2a-7c3e-bf2a-111111111111", "a" * 64
-        )
-        checks = check_conformance(
-            receipt, level=4, arguments={"x": 1}, prior_receipt_hashes=None
-        )
+        receipt = self._v02_receipt_with_prior("0192c8d0-1f2a-7c3e-bf2a-111111111111", "a" * 64)
+        checks = check_conformance(receipt, level=4, arguments={"x": 1}, prior_receipt_hashes=None)
         codes = {(c.code, c.severity) for c in checks}
         assert ("LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES", "info") in codes
 
-    def test_receipt_without_chain_link_skips_check_cleanly(
-        self, minimal_l3_receipt: dict
-    ) -> None:
+    def test_receipt_without_chain_link_skips_check_cleanly(self, minimal_l3_receipt: dict) -> None:
         """A receipt without prior_receipt must not fire the chain check
         even when prior_receipt_hashes is supplied."""
         checks = check_conformance(
@@ -492,9 +482,7 @@ class TestLevel4Chain:
         assert "LEVEL_4_BROKEN_CHAIN" not in codes
         assert "LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES" not in codes
 
-    def test_l4_skip_does_not_fire_when_context_supplied(
-        self, receipt_with_approval: dict
-    ) -> None:
+    def test_l4_skip_does_not_fire_when_context_supplied(self, receipt_with_approval: dict) -> None:
         policy = {
             "name": "p",
             "version": "1",

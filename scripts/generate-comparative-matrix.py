@@ -40,46 +40,46 @@ VENDORS = (
 # matches the order of VENDORS above.
 MATRIX: tuple[tuple[str, str, str, str, str, str, str], ...] = (
     # # name                                 JamJet  Anth  Cloud  LS    AGT
-    ("01", "merge-allow",                    PASS,  PART, PART, PART, PASS),
-    ("02", "mutation-require-approval",      PASS,  PASS, PASS, PART, PART),
-    ("03", "refund-under-limit",             PASS,  PART, PART, PART, PASS),
-    ("04", "merge-deny",                     PASS,  PASS, PASS, PART, PASS),
-    ("05", "refund-escalate",                PASS,  NCOV, NCOV, PART, PASS),
-    ("06", "missing-policy-block",           PASS,  NCOV, NCOV, NCOV, PART),
-    ("07", "bad-timestamp-format",           PASS,  DOCS, PASS, PASS, PASS),
-    ("08", "arguments-hash-mismatch",        PASS,  PASS, NCOV, PASS, NCOV),
-    ("09", "receipt-hash-mismatch",          PASS,  NCOV, NCOV, NCOV, PASS),
-    ("10", "claim-level-3-without-hash",     PASS,  NCOV, NCOV, NCOV, DOCS),
-    ("11", "stale-approval",                 PASS,  NCOV, NCOV, NCOV, NCOV),
-    ("12", "unauthorized-approver",          PASS,  PART, PART, PART, NCOV),
-    ("13", "replay-receipt-id",              PASS,  PASS, NCOV, PASS, PASS),
-    ("14", "completed-before-issued",        PASS,  PART, NCOV, PASS, NCOV),
-    ("15", "policy-version-downgrade",       PASS,  NCOV, NCOV, NCOV, NCOV),
-    ("16", "deny-with-execution-success",    PASS,  PART, NCOV, PART, PART),
-    ("17", "approval-inside-window",         PASS,  NA,   NA,   NA,   NA),
-    ("18", "known-policy-store-passes",      PASS,  NA,   NA,   NA,   NA),
-    ("19", "actor-human-validates",          PASS,  NCOV, PART, PART, PART),
-    ("20", "numeric-arguments-validate",     PASS,  PASS, NCOV, PASS, NCOV),
-    ("21", "multiline-arguments-validate",   PASS,  PASS, NCOV, PASS, NCOV),
-    ("22", "missing-execution-block",        PASS,  NCOV, NCOV, NCOV, PASS),
-    ("23", "malformed-receipt-id",           PASS,  DOCS, PART, PASS, PASS),
-    ("24", "mutated-approver-no-rehash",     PASS,  NCOV, NCOV, NCOV, NCOV),
-    ("25", "clean-receipt-id-passes-replay", PASS,  PASS, NCOV, PASS, PASS),
-    ("26", "completeness-below-threshold",   PASS,  DOCS, PASS, PASS, PASS),
-    ("27", "completeness-score-mismatch",    PASS,  PART, PASS, PASS, PASS),
-    ("28", "honest-completeness-passes",     PASS,  PART, PART, PART, PART),
-    ("29", "valid-chain-passes",             PASS,  NCOV, NCOV, NCOV, PASS),
-    ("30", "broken-chain-fires",             PASS,  NCOV, DOCS, DOCS, PASS),
-    ("31", "allow-with-blocked-execution",   PASS,  PART, NCOV, PART, PASS),
-    ("32", "fork-chain-shared-prior",        PASS,  NCOV, NCOV, PART, PASS),
-    ("33", "unicode-arguments-validate",     PASS,  PASS, NCOV, PASS, NCOV),
-    ("34", "empty-arguments-validate",       PASS,  PASS, NCOV, PASS, NCOV),
-    ("35", "staging-environment-validates",  PASS,  NCOV, NCOV, PART, NCOV),
-    ("36", "dev-environment-validates",      PASS,  NCOV, NCOV, PART, NCOV),
+    ("01", "merge-allow", PASS, PART, PART, PART, PASS),
+    ("02", "mutation-require-approval", PASS, PASS, PASS, PART, PART),
+    ("03", "refund-under-limit", PASS, PART, PART, PART, PASS),
+    ("04", "merge-deny", PASS, PASS, PASS, PART, PASS),
+    ("05", "refund-escalate", PASS, NCOV, NCOV, PART, PASS),
+    ("06", "missing-policy-block", PASS, NCOV, NCOV, NCOV, PART),
+    ("07", "bad-timestamp-format", PASS, DOCS, PASS, PASS, PASS),
+    ("08", "arguments-hash-mismatch", PASS, PASS, NCOV, PASS, NCOV),
+    ("09", "receipt-hash-mismatch", PASS, NCOV, NCOV, NCOV, PASS),
+    ("10", "claim-level-3-without-hash", PASS, NCOV, NCOV, NCOV, DOCS),
+    ("11", "stale-approval", PASS, NCOV, NCOV, NCOV, NCOV),
+    ("12", "unauthorized-approver", PASS, PART, PART, PART, NCOV),
+    ("13", "replay-receipt-id", PASS, PASS, NCOV, PASS, PASS),
+    ("14", "completed-before-issued", PASS, PART, NCOV, PASS, NCOV),
+    ("15", "policy-version-downgrade", PASS, NCOV, NCOV, NCOV, NCOV),
+    ("16", "deny-with-execution-success", PASS, PART, NCOV, PART, PART),
+    ("17", "approval-inside-window", PASS, NA, NA, NA, NA),
+    ("18", "known-policy-store-passes", PASS, NA, NA, NA, NA),
+    ("19", "actor-human-validates", PASS, NCOV, PART, PART, PART),
+    ("20", "numeric-arguments-validate", PASS, PASS, NCOV, PASS, NCOV),
+    ("21", "multiline-arguments-validate", PASS, PASS, NCOV, PASS, NCOV),
+    ("22", "missing-execution-block", PASS, NCOV, NCOV, NCOV, PASS),
+    ("23", "malformed-receipt-id", PASS, DOCS, PART, PASS, PASS),
+    ("24", "mutated-approver-no-rehash", PASS, NCOV, NCOV, NCOV, NCOV),
+    ("25", "clean-receipt-id-passes-replay", PASS, PASS, NCOV, PASS, PASS),
+    ("26", "completeness-below-threshold", PASS, DOCS, PASS, PASS, PASS),
+    ("27", "completeness-score-mismatch", PASS, PART, PASS, PASS, PASS),
+    ("28", "honest-completeness-passes", PASS, PART, PART, PART, PART),
+    ("29", "valid-chain-passes", PASS, NCOV, NCOV, NCOV, PASS),
+    ("30", "broken-chain-fires", PASS, NCOV, DOCS, DOCS, PASS),
+    ("31", "allow-with-blocked-execution", PASS, PART, NCOV, PART, PASS),
+    ("32", "fork-chain-shared-prior", PASS, NCOV, NCOV, PART, PASS),
+    ("33", "unicode-arguments-validate", PASS, PASS, NCOV, PASS, NCOV),
+    ("34", "empty-arguments-validate", PASS, PASS, NCOV, PASS, NCOV),
+    ("35", "staging-environment-validates", PASS, NCOV, NCOV, PART, NCOV),
+    ("36", "dev-environment-validates", PASS, NCOV, NCOV, PART, NCOV),
     ("37", "execution-failure-with-error-code", PASS, PART, NCOV, PASS, PASS),
-    ("38", "approval-without-context",       PASS,  PASS, PART, PART, NCOV),
-    ("39", "nested-arguments-canonical",     PASS,  PASS, NCOV, PASS, NCOV),
-    ("40", "large-arguments-validate",       PASS,  PASS, NCOV, PASS, NCOV),
+    ("38", "approval-without-context", PASS, PASS, PART, PART, NCOV),
+    ("39", "nested-arguments-canonical", PASS, PASS, NCOV, PASS, NCOV),
+    ("40", "large-arguments-validate", PASS, PASS, NCOV, PASS, NCOV),
 )
 
 
@@ -89,8 +89,8 @@ def tallies() -> dict[str, dict[str, int]]:
         v: {PASS: 0, PART: 0, DOCS: 0, NCOV: 0, NA: 0} for v in VENDORS
     }
     for row in MATRIX:
-        scenario_no, name, *verdicts = row
-        for vendor, verdict in zip(VENDORS, verdicts):
+        verdicts = row[2:]
+        for vendor, verdict in zip(VENDORS, verdicts, strict=True):
             out[vendor][verdict] += 1
     return out
 
@@ -165,38 +165,38 @@ def build_svg() -> str:
     lines.append(
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'viewBox="0 0 {WIDTH} {height}" role="img" '
-        f'aria-label="AgentBoundary conformance matrix — 40 scenarios across JamJet reference and four agent-governance products">'
+        f'aria-label="AgentBoundary conformance matrix — 40 scenarios across JamJet reference and four agent-governance products">'  # noqa: E501
     )
     lines.append(
-        '<style>'
-        '.bg{fill:#fafaf9}'
-        '.fg{fill:#1c1917}'
-        '.muted{fill:#57534e}'
-        '.accent{fill:#b45309}'
-        '.row-band{fill:#fafaf9}'
-        '.row-band-alt{fill:#f5f5f4}'
-        '.row-divider{stroke:#e7e5e4;stroke-width:1}'
-        '.col-divider{stroke:#d6d3d1;stroke-width:1}'
-        '@media (prefers-color-scheme: dark){'
-        '.bg{fill:#0c0a09}'
-        '.fg{fill:#f5f5f4}'
-        '.muted{fill:#a8a29e}'
-        '.accent{fill:#fbbf24}'
-        '.row-band{fill:#0c0a09}'
-        '.row-band-alt{fill:#1c1917}'
-        '.row-divider{stroke:#292524}'
-        '.col-divider{stroke:#44403c}'
-        '}'
-        'text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:12px}'
-        '.title{font-size:16px;font-weight:600}'
-        '.subtitle{font-size:11px}'
-        '.col-header{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em}'
+        "<style>"
+        ".bg{fill:#fafaf9}"
+        ".fg{fill:#1c1917}"
+        ".muted{fill:#57534e}"
+        ".accent{fill:#b45309}"
+        ".row-band{fill:#fafaf9}"
+        ".row-band-alt{fill:#f5f5f4}"
+        ".row-divider{stroke:#e7e5e4;stroke-width:1}"
+        ".col-divider{stroke:#d6d3d1;stroke-width:1}"
+        "@media (prefers-color-scheme: dark){"
+        ".bg{fill:#0c0a09}"
+        ".fg{fill:#f5f5f4}"
+        ".muted{fill:#a8a29e}"
+        ".accent{fill:#fbbf24}"
+        ".row-band{fill:#0c0a09}"
+        ".row-band-alt{fill:#1c1917}"
+        ".row-divider{stroke:#292524}"
+        ".col-divider{stroke:#44403c}"
+        "}"
+        'text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:12px}'  # noqa: E501
+        ".title{font-size:16px;font-weight:600}"
+        ".subtitle{font-size:11px}"
+        ".col-header{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em}"
         '.scenario-name{font-family:ui-monospace,"SF Mono",Menlo,Monaco,monospace;font-size:11px}'
-        '.verdict{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10px;font-weight:600;text-anchor:middle}'
-        '.tally-label{font-size:11px;font-weight:600}'
-        '.tally-num{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;text-anchor:middle}'
-        '.legend{font-size:11px}'
-        '</style>'
+        '.verdict{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10px;font-weight:600;text-anchor:middle}'  # noqa: E501
+        ".tally-label{font-size:11px;font-weight:600}"
+        '.tally-num{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;text-anchor:middle}'  # noqa: E501
+        ".legend{font-size:11px}"
+        "</style>"
     )
 
     lines.append(f'<rect class="bg" width="{WIDTH}" height="{height}"/>')
@@ -204,21 +204,21 @@ def build_svg() -> str:
     # Title + subtitle
     lines.append(
         f'<text class="fg title" x="{PADDING_LEFT}" y="32">'
-        'AgentBoundary v0.1 conformance — cross-vendor matrix'
-        '</text>'
+        "AgentBoundary v0.1 conformance — cross-vendor matrix"
+        "</text>"
     )
     lines.append(
         f'<text class="muted subtitle" x="{PADDING_LEFT}" y="50">'
-        '40 deterministic scenarios &#x00B7; 4 named products &#x00B7; docs-only methodology &#x00B7; '
-        'right-to-respond opened pre-publication'
-        '</text>'
+        "40 deterministic scenarios &#x00B7; 4 named products &#x00B7; "
+        "docs-only methodology &#x00B7; right-to-respond opened pre-publication"
+        "</text>"
     )
 
     # Column headers
     lines.append(
         f'<text class="muted col-header" x="{PADDING_LEFT}" y="{PADDING_TOP + 20}">'
-        '#  scenario'
-        '</text>'
+        "#  scenario"
+        "</text>"
     )
     for i, vendor in enumerate(VENDORS):
         x = vendor_x(i) + VENDOR_COL_W // 2
@@ -244,8 +244,8 @@ def build_svg() -> str:
         scenario_x = PADDING_LEFT + 4
         lines.append(
             f'<text class="fg scenario-name" x="{scenario_x}" y="{y_text}">'
-            f'{scenario_no}  {name}'
-            f'</text>'
+            f"{scenario_no}  {name}"
+            f"</text>"
         )
 
         # Verdict cells
@@ -287,15 +287,12 @@ def build_svg() -> str:
     for ti, (label, verdict, color) in enumerate(tally_rows):
         y = tally_top + 14 + (ti + 1) * 14
         lines.append(
-            f'<text class="tally-label" x="{PADDING_LEFT}" y="{y}" '
-            f'fill="{color}">{label}</text>'
+            f'<text class="tally-label" x="{PADDING_LEFT}" y="{y}" fill="{color}">{label}</text>'
         )
         for vi, vendor in enumerate(VENDORS):
             count = counts[vendor][verdict]
             x = vendor_x(vi) + VENDOR_COL_W // 2
-            lines.append(
-                f'<text class="fg tally-num" x="{x}" y="{y}">{count}</text>'
-            )
+            lines.append(f'<text class="fg tally-num" x="{x}" y="{y}">{count}</text>')
 
     # Legend
     legend_items = [
@@ -306,14 +303,17 @@ def build_svg() -> str:
         ("N/A", "positive boundary scenario; semantics don't apply"),
     ]
     lines.append(
-        f'<text class="muted col-header" x="{PADDING_LEFT}" '
-        f'y="{legend_top + 16}">legend</text>'
+        f'<text class="muted col-header" x="{PADDING_LEFT}" y="{legend_top + 16}">legend</text>'
     )
     for i, (label, desc) in enumerate(legend_items):
         y = legend_top + 30 + i * 14
         # color-coded chip
         verdict_key = {
-            "PASS": PASS, "PART": PART, "DOCS": DOCS, "—": NCOV, "N/A": NA,
+            "PASS": PASS,
+            "PART": PART,
+            "DOCS": DOCS,
+            "—": NCOV,
+            "N/A": NA,
         }[label]
         chip_style = VERDICT_STYLE[verdict_key]
         # NB: legend chips are placed horizontally; rewrap two per row
@@ -333,7 +333,7 @@ def build_svg() -> str:
             f'<text class="muted legend" x="{chip_x + 48}" y="{chip_y + 11}">{desc}</text>'
         )
 
-    lines.append('</svg>')
+    lines.append("</svg>")
     return "\n".join(lines) + "\n"
 
 

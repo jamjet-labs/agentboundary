@@ -27,14 +27,13 @@ from typing import Any
 from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
 from agentboundary.provenance import compute_completeness_score
 
-
 # AGT decision enum -> AgentBoundary policy.decision enum
 _DECISION_MAP: dict[str, str] = {
     "allow": "allow",
     "deny": "deny",
-    "audit": "allow",       # AGT 'audit' = passed but logged; closest L2 value
-    "quarantine": "deny",   # AGT 'quarantine' = stop with stronger consequence
-    "warning": "allow",     # AGT 'warning' = passed with a note
+    "audit": "allow",  # AGT 'audit' = passed but logged; closest L2 value
+    "quarantine": "deny",  # AGT 'quarantine' = stop with stronger consequence
+    "warning": "allow",  # AGT 'warning' = passed with a note
 }
 
 # AGT outcome -> AgentBoundary execution.status
@@ -81,7 +80,8 @@ def agt_entry_to_receipt(
     arguments = _extract_arguments(entry)
     arguments_hash = compute_arguments_hash(arguments)
 
-    decision = _DECISION_MAP.get(entry.get("decision", "allow"), "allow")
+    # `decision` is computed by _build_policy_block from the same entry;
+    # only `outcome` is used at this level (passed into _build_execution_block).
     outcome = _OUTCOME_MAP.get(entry.get("outcome", "success"), "success")
 
     receipt: dict[str, Any] = {
@@ -154,9 +154,7 @@ def _infer_actor_type(actor_id: str) -> str:
     return "agent"
 
 
-def _build_agent_block(
-    entry: dict[str, Any], bom: dict[str, Any] | None
-) -> dict[str, Any]:
+def _build_agent_block(entry: dict[str, Any], bom: dict[str, Any] | None) -> dict[str, Any]:
     metadata = entry.get("metadata", {}) if isinstance(entry.get("metadata"), dict) else {}
     return {
         "framework": metadata.get("framework", "unknown"),
@@ -165,9 +163,7 @@ def _build_agent_block(
     }
 
 
-def _build_tool_block(
-    entry: dict[str, Any], bom: dict[str, Any] | None
-) -> dict[str, Any]:
+def _build_tool_block(entry: dict[str, Any], bom: dict[str, Any] | None) -> dict[str, Any]:
     data = entry.get("data", {}) if isinstance(entry.get("data"), dict) else {}
     metadata = entry.get("metadata", {}) if isinstance(entry.get("metadata"), dict) else {}
     return {
@@ -193,9 +189,7 @@ def _build_target_block(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _build_policy_block(
-    entry: dict[str, Any], bom: dict[str, Any] | None
-) -> dict[str, Any]:
+def _build_policy_block(entry: dict[str, Any], bom: dict[str, Any] | None) -> dict[str, Any]:
     metadata = entry.get("metadata", {}) if isinstance(entry.get("metadata"), dict) else {}
     matched_rule = entry.get("matched_rule") or metadata.get("matched_rule") or "unknown"
     decision = _DECISION_MAP.get(entry.get("decision", "allow"), "allow")
@@ -261,12 +255,16 @@ def _build_provenance(
         # Agent block: framework/version/model usually live in custom
         # metadata. If present, observed; if missing, synthesized to "unknown".
         "agent.framework": "observed" if metadata.get("framework") else "synthesized",
-        "agent.framework_version": "observed" if metadata.get("framework_version") else "synthesized",
+        "agent.framework_version": "observed"
+        if metadata.get("framework_version")
+        else "synthesized",
         "agent.model": "observed" if metadata.get("model") else "synthesized",
         # Tool block:
         # - name: AGT sample shape puts tool name in data.tool; observed when present
         # - capability: derived from AGT's event_type enum -> inferred
-        "tool.name": "observed" if (data.get("tool") or metadata.get("tool_name")) else "synthesized",
+        "tool.name": "observed"
+        if (data.get("tool") or metadata.get("tool_name"))
+        else "synthesized",
         "tool.capability": "inferred",
         # Target block: AGT collapses target into one 'resource' string.
         # Splitting on / to derive system+resource_id is deterministic -> inferred.
@@ -301,7 +299,7 @@ def _build_provenance(
     if isinstance(resource, str) and "/" in resource:
         prov["target.resource_id"] = "inferred"
 
-    if outcome_success := (entry.get("outcome") == "success"):
+    if entry.get("outcome") == "success":
         # result_ref is observed when AGT metadata.result_ref exists; otherwise
         # synthesized (the adapter falls back to "agt://<entry_id>")
         prov["execution.result_ref"] = "observed" if metadata.get("result_ref") else "synthesized"

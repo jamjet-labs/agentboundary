@@ -512,8 +512,7 @@ def _level_4_checks(
                     code="LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES",
                     severity="info",
                     message=(
-                        "prior_receipt_hashes not supplied; "
-                        "LEVEL_4_BROKEN_CHAIN check skipped"
+                        "prior_receipt_hashes not supplied; LEVEL_4_BROKEN_CHAIN check skipped"
                     ),
                 )
             )
@@ -559,9 +558,7 @@ def _level_4_checks(
                 level=4,
                 code="LEVEL_4_SKIPPED_NO_PRIOR_RECEIPTS",
                 severity="info",
-                message=(
-                    "prior_receipt_ids not supplied; LEVEL_4_RECEIPT_ID_REPLAY skipped"
-                ),
+                message=("prior_receipt_ids not supplied; LEVEL_4_RECEIPT_ID_REPLAY skipped"),
             )
         )
     else:

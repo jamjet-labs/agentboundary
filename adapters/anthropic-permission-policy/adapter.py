@@ -32,12 +32,14 @@ class PermissionDecisionEvent(TypedDict, total=False):
     session_id: str
     tool_name: str
     tool_input: dict[str, Any]
-    decision: str            # "allow" | "deny" | "ask"
-    decided_via: str         # "hook" | "deny_rule" | "permission_mode" | "allow_rule" | "canUseTool"
-    matched_rule: str | None # e.g. "Bash(rm *)" when decided by a rule
-    permission_mode: str     # "default" | "dontAsk" | "acceptEdits" | "bypassPermissions" | "plan" | "auto"
-    decided_at: str          # RFC 3339
-    decided_by: str | None   # only present for canUseTool-resolved decisions
+    decision: str  # "allow" | "deny" | "ask"
+    decided_via: str  # "hook" | "deny_rule" | "permission_mode" | "allow_rule" | "canUseTool"
+    matched_rule: str | None  # e.g. "Bash(rm *)" when decided by a rule
+    permission_mode: (
+        str  # "default" | "dontAsk" | "acceptEdits" | "bypassPermissions" | "plan" | "auto"
+    )
+    decided_at: str  # RFC 3339
+    decided_by: str | None  # only present for canUseTool-resolved decisions
     reason: str | None
     updated_input: dict[str, Any] | None  # canUseTool may modify args
 
@@ -53,7 +55,7 @@ class AdapterContext(TypedDict, total=False):
     target_resource_id: str
     policy_name: str
     policy_version: str
-    execution_status: str        # "success" | "failure" | "blocked"
+    execution_status: str  # "success" | "failure" | "blocked"
     execution_completed_at: str
     execution_result_ref: str
     execution_error_code: str
@@ -191,7 +193,9 @@ def _build_provenance(
         "actor.id": "synthesized",
         # agent fields: framework is constant; version/model from context
         "agent.framework": "inferred",
-        "agent.framework_version": "observed" if "agent_framework_version" in ctx else "synthesized",
+        "agent.framework_version": "observed"
+        if "agent_framework_version" in ctx
+        else "synthesized",
         "agent.model": "observed" if "agent_model" in ctx else "synthesized",
         # tool: name observed from event; capability inferred from name
         "tool.name": "observed",
@@ -202,7 +206,9 @@ def _build_provenance(
         # arguments_hash: observed — adapter has the args
         "arguments_hash": "observed",
         # policy: name inferred when matched_rule available, synthesized otherwise
-        "policy.name": "observed" if (event.get("matched_rule") or "policy_name" in ctx) else "synthesized",
+        "policy.name": "observed"
+        if (event.get("matched_rule") or "policy_name" in ctx)
+        else "synthesized",
         "policy.version": "observed" if "policy_version" in ctx else "synthesized",
         "policy.decision": "observed",
         # execution: caller-supplied or synthesized
@@ -219,10 +225,14 @@ def _build_provenance(
         prov["target.resource_id"] = "observed"
     if "execution_result_ref" in ctx:
         prov["execution.result_ref"] = "observed"
-    elif decided_via_callback or "execution_status" not in ctx:
+    else:
         # synthesized anthropic://decision/<id> fallback for allow decisions
         # (only present when execution.status is success)
-        if ctx.get("execution_status", "success" if event["decision"] == "allow" else "blocked") == "success":
+        default_status = "success" if event["decision"] == "allow" else "blocked"
+        effective_status = ctx.get("execution_status", default_status)
+        if (
+            decided_via_callback or "execution_status" not in ctx
+        ) and effective_status == "success":
             prov["execution.result_ref"] = "synthesized"
     if "execution_error_code" in ctx:
         prov["execution.error_code"] = "observed"

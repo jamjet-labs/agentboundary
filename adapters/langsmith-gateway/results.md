@@ -119,4 +119,5 @@ These are observability + eval primitives. Excellent for what they do. Orthogona
 
 ## Right-to-respond
 
-Findings will be sent to LangChain before W12 publication.
+Filed 2026-05-21 on the LangSmith SDK repository:
+**[`langchain-ai/langsmith-sdk#2919`](https://github.com/langchain-ai/langsmith-sdk/issues/2919)** — @hinthornw tagged. Corrections received within 7 days are incorporated; later corrections appear inline with date stamps.

@@ -119,4 +119,5 @@ These are excellent primitives for *running* an HITL workflow. They are orthogon
 
 ## Right-to-respond
 
-A summary of these findings will be filed against `cloudflare/agents` before the W12 comparative report publishes. Corrections received within 7 days are incorporated; later corrections appear inline with date stamps.
+Filed 2026-05-21 against the Cloudflare Agents repository:
+**[`cloudflare/agents#1571`](https://github.com/cloudflare/agents/issues/1571)** — @threepointone tagged. Corrections received within 7 days are incorporated; later corrections appear inline with date stamps.

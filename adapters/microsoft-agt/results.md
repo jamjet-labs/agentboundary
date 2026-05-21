@@ -156,4 +156,5 @@ For each NOT COVERED gap, a one-sentence concrete attack-vector or audit-failure
 
 ## Right-to-respond
 
-A summary of these findings was filed as an issue on the AGT repository on 2026-05-21. Corrections received within 7 days are incorporated; later corrections appear inline with date stamps.
+Filed 2026-05-21 on the AGT repository:
+**[`microsoft/agent-governance-toolkit#2449`](https://github.com/microsoft/agent-governance-toolkit/issues/2449)** — @imran-siddique tagged. Corrections received within 7 days are incorporated; later corrections appear inline with date stamps.

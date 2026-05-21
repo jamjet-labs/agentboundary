@@ -15,7 +15,9 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, ValidationError
 
-from agentboundary._schema import load_action_receipt_schema
+from agentboundary._schema import load_action_receipt_schema, load_schema_for_version
+
+_DEFAULT_VERSION = "agentboundary/v0.1"
 
 
 def validate_receipt(receipt: dict[str, Any]) -> list[str]:
@@ -45,12 +47,31 @@ def iter_schema_errors(receipt: dict[str, Any]) -> list[ValidationError]:
     ``err.validator`` (e.g. ``"required"``, ``"enum"``, ``"type"``) and
     ``err.validator_value`` without parsing the human-readable message.
 
-    Downstream callers (conformance checks, CLI) use this to make decisions
-    that must not couple to jsonschema's exact error-message wording.
+    The schema is selected by the receipt's ``version`` field. Unknown
+    versions fall back to the v0.1 schema so receipts that drift to an
+    unrecognised future version still surface a structural failure rather
+    than throwing — the caller sees the version-mismatch as a normal
+    schema error rather than an import-time crash.
     """
-    schema = load_action_receipt_schema()
+    schema = _schema_for_receipt(receipt)
     validator = Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
     return sorted(validator.iter_errors(receipt), key=_error_sort_key)
+
+
+def _schema_for_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+    """Pick the right schema based on the receipt's declared version.
+
+    Defaults to v0.1 when the version field is missing or unrecognised so
+    downstream validation still runs (and reports the version mismatch as
+    a normal schema error rather than crashing).
+    """
+    version = receipt.get("version") if isinstance(receipt, dict) else None
+    if not isinstance(version, str):
+        return load_action_receipt_schema()
+    try:
+        return load_schema_for_version(version)
+    except ValueError:
+        return load_action_receipt_schema()
 
 
 def _format_error(err: Any) -> str:

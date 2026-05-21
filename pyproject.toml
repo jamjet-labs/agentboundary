@@ -54,6 +54,7 @@ packages = ["src/agentboundary"]
 # second download.
 [tool.hatch.build.targets.wheel.force-include]
 "docs/schemas/action-receipt-v0.1.json" = "agentboundary/_data/action-receipt-v0.1.json"
+"docs/schemas/action-receipt-v0.2-alpha.json" = "agentboundary/_data/action-receipt-v0.2-alpha.json"
 "docs/receipts/github-merge.json" = "agentboundary/_data/examples/github-merge.json"
 "docs/receipts/spring-service-mutation.json" = "agentboundary/_data/examples/spring-service-mutation.json"
 "docs/receipts/stripe-refund.json" = "agentboundary/_data/examples/stripe-refund.json"

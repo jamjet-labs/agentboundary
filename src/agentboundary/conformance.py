@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, cast
 
 from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
+from agentboundary.provenance import compute_completeness_score
 from agentboundary.validator import iter_schema_errors, validate_receipt
 
 Severity = Literal["fail", "info"]
@@ -103,6 +104,7 @@ def check_conformance(
     policy_full: dict[str, Any] | None = None,
     prior_receipt_ids: set[str] | None = None,
     policy_store: set[tuple[str, str]] | None = None,
+    minimum_completeness: float | None = None,
 ) -> list[ConformanceCheck]:
     """Run all conformance checks up to ``level`` against ``receipt``.
 
@@ -124,6 +126,12 @@ def check_conformance(
     ``policy_store`` is the set of ``(policy.name, policy.version)`` tuples
     the verifier accepts as valid. Required for Level 4 policy-downgrade
     detection; absence emits ``LEVEL_4_SKIPPED_NO_POLICY_STORE``.
+
+    ``minimum_completeness`` is a float in [0.0, 1.0] specifying the
+    minimum acceptable v0.2-alpha completeness_score. Optional; if
+    omitted, the threshold check does not fire. The mismatch check
+    (LEVEL_4_COMPLETENESS_SCORE_MISMATCH) always runs when a receipt
+    declares completeness_score, independent of this kwarg.
     """
     if level < 1 or level > 4:
         raise ValueError(f"level must be in 1..4, got {level}")
@@ -279,6 +287,7 @@ def check_conformance(
                 policy_full=policy_full,
                 prior_receipt_ids=prior_receipt_ids,
                 policy_store=policy_store,
+                minimum_completeness=minimum_completeness,
             )
         )
 
@@ -291,6 +300,7 @@ def _level_4_checks(
     policy_full: dict[str, Any] | None,
     prior_receipt_ids: set[str] | None,
     policy_store: set[tuple[str, str]] | None,
+    minimum_completeness: float | None,
 ) -> list[ConformanceCheck]:
     """Run Level 4 (Tamper-Evident) checks.
 
@@ -436,6 +446,46 @@ def _level_4_checks(
                         "claimed policy may be a downgrade or fabrication"
                     ),
                     field="policy",
+                )
+            )
+
+    # v0.2-alpha completeness: emitter's declared completeness_score must
+    # match the recomputed value derived from provenance. Score is a
+    # self-honest primitive — lying about it is detectable when the
+    # receipt's provenance map disagrees with the formula. Skipped silently
+    # when the receipt has no completeness_score (v0.1 receipts, or
+    # v0.2-alpha receipts that don't opt in).
+    declared_score = receipt.get("completeness_score")
+    if isinstance(declared_score, (int, float)):
+        recomputed = compute_completeness_score(receipt)
+        # Compare at 3-decimal precision (integer milli-units) so the
+        # comparison is exact, never a float-epsilon question.
+        declared_milli = round(float(declared_score) * 1000)
+        recomputed_milli = round(recomputed * 1000)
+        if declared_milli != recomputed_milli:
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_COMPLETENESS_SCORE_MISMATCH",
+                    severity="fail",
+                    message=(
+                        f"completeness_score={declared_score} but recomputed "
+                        f"from provenance = {recomputed:.3f}"
+                    ),
+                    field="completeness_score",
+                )
+            )
+        if minimum_completeness is not None and recomputed < float(minimum_completeness):
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_COMPLETENESS_BELOW_THRESHOLD",
+                    severity="fail",
+                    message=(
+                        f"completeness_score={recomputed:.3f} is below the "
+                        f"verifier's minimum_completeness={minimum_completeness}"
+                    ),
+                    field="completeness_score",
                 )
             )
 

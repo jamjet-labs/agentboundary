@@ -289,6 +289,112 @@ class TestLevel4:
         codes = {c.code for c in checks if c.severity == "fail"}
         assert "LEVEL_4_ESCALATE_EXECUTED" in codes
 
+
+class TestLevel4Completeness:
+    """v0.2-alpha completeness_score + provenance checks (L4)."""
+
+    @pytest.fixture
+    def v02_allow_receipt(self) -> dict:
+        from agentboundary.hashing import (
+            compute_arguments_hash as _ah,
+            compute_receipt_hash as _rh,
+        )
+        base = {
+            "version": "agentboundary/v0.2-alpha",
+            "receipt_id": "0192c8d0-1f2a-7c3e-bf2a-1a4d3f5e6c7b",
+            "issued_at": "2026-06-15T14:23:08Z",
+            "actor": {"type": "agent", "id": "agent:test"},
+            "agent": {
+                "framework": "test",
+                "framework_version": "1.0",
+                "model": "test",
+            },
+            "tool": {"name": "t", "capability": "test.do"},
+            "target": {"system": "test.example", "environment": "dev"},
+            "arguments_hash": _ah({"x": 1}),
+            "policy": {"name": "p", "version": "1", "decision": "allow"},
+            "execution": {
+                "status": "success",
+                "completed_at": "2026-06-15T14:23:09Z",
+            },
+        }
+        return base
+
+    def test_score_matches_recomputed_passes(self, v02_allow_receipt: dict) -> None:
+        from agentboundary.hashing import compute_receipt_hash as _rh
+
+        receipt = deepcopy(v02_allow_receipt)
+        receipt["provenance"] = {
+            "receipt_id": "observed",
+            "issued_at": "observed",
+            "actor.type": "observed",
+            "actor.id": "observed",
+            "agent.framework": "observed",
+            "agent.framework_version": "observed",
+            "agent.model": "observed",
+            "tool.name": "observed",
+            "tool.capability": "observed",
+            "target.system": "observed",
+            "target.environment": "observed",
+            "arguments_hash": "observed",
+            "policy.name": "observed",
+            "policy.version": "observed",
+            "policy.decision": "observed",
+            "execution.status": "observed",
+            "execution.completed_at": "observed",
+        }
+        receipt["completeness_score"] = 1.0
+        receipt["receipt_hash"] = _rh(receipt)
+        checks = check_conformance(receipt, level=4, arguments={"x": 1})
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_COMPLETENESS_SCORE_MISMATCH" not in codes
+
+    def test_score_mismatch_fails(self, v02_allow_receipt: dict) -> None:
+        from agentboundary.hashing import compute_receipt_hash as _rh
+
+        receipt = deepcopy(v02_allow_receipt)
+        # Empty provenance => score should be 0.0; but emitter claims 0.95
+        receipt["provenance"] = {}
+        receipt["completeness_score"] = 0.95
+        receipt["receipt_hash"] = _rh(receipt)
+        checks = check_conformance(receipt, level=4, arguments={"x": 1})
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_COMPLETENESS_SCORE_MISMATCH" in codes
+
+    def test_threshold_check_only_fires_when_minimum_supplied(
+        self, v02_allow_receipt: dict
+    ) -> None:
+        from agentboundary.hashing import compute_receipt_hash as _rh
+
+        receipt = deepcopy(v02_allow_receipt)
+        receipt["provenance"] = {}
+        receipt["completeness_score"] = 0.0
+        receipt["receipt_hash"] = _rh(receipt)
+        # No minimum_completeness: check is silent
+        checks = check_conformance(receipt, level=4, arguments={"x": 1})
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_COMPLETENESS_BELOW_THRESHOLD" not in codes
+        # With minimum: fires
+        checks = check_conformance(
+            receipt, level=4, arguments={"x": 1}, minimum_completeness=0.5
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_COMPLETENESS_BELOW_THRESHOLD" in codes
+
+    def test_completeness_checks_skipped_for_v01_receipts(
+        self, minimal_l3_receipt: dict
+    ) -> None:
+        """A v0.1 receipt has no completeness_score; the checks must no-op."""
+        checks = check_conformance(
+            minimal_l3_receipt,
+            level=4,
+            arguments={"x": 1},
+            minimum_completeness=0.99,
+        )
+        codes = {c.code for c in checks if c.severity == "fail"}
+        assert "LEVEL_4_COMPLETENESS_BELOW_THRESHOLD" not in codes
+        assert "LEVEL_4_COMPLETENESS_SCORE_MISMATCH" not in codes
+
     def test_l4_skip_does_not_fire_when_context_supplied(
         self, receipt_with_approval: dict
     ) -> None:

@@ -56,6 +56,18 @@ This is `docs/receipts/github-merge.json` verbatim. The `receipt_hash` is the ca
 - [`src/agentboundary/`](src/agentboundary/) — Python reference implementation (validator, hashing, runtime, CLI)
 - [`npm/`](npm/) — thin Node wrapper that dispatches to `uvx`, `pipx`, or `python3 -m agentboundary`
 
+## Comparison with other agent-governance products
+
+![Cross-vendor conformance matrix — 40 scenarios × JamJet reference + Microsoft AGT, Anthropic permission_policy, LangSmith Gateway, Cloudflare HITL](docs/assets/comparative-matrix.svg)
+
+Each vendor adapter in [`adapters/`](adapters/) translates that vendor's normative artifact (or, where there isn't one, the documented-recommended capture shape) into an AgentBoundary v0.2-alpha receipt, runs all 40 scenarios against the result, and records what survives. Per-vendor `results.md` files document every PASS / PARTIAL / DOCS-ONLY / NOT COVERED with structural reasoning. The data table that drives the matrix lives in [`scripts/generate-comparative-matrix.py`](scripts/generate-comparative-matrix.py); the SVG above is a deterministic function of that table.
+
+The framing in the comparative report is that AGT and AgentBoundary are *closest peers* (both artifact formats); Cloudflare HITL is a workflow primitive (durable approval gates), not an emitted-artifact format; LangSmith is the richest observability platform but deliberately leaves the audit schema to team convention; Anthropic ships the most layered runtime permission primitive but does not publish a portable audit-log schema. Comparison reveals that none of the four exposes a single-artifact verification pattern a third party can run without trusting the vendor's runtime — which is the gap this spec fills.
+
+**Read the full report:**
+- [`jamjet.dev/blog/agent-action-control-40-tests`](https://jamjet.dev/blog/agent-action-control-40-tests/) — long-form write-up
+- [`agentboundary.jamjet.dev/reports/2026-05-comparative`](https://agentboundary.jamjet.dev/reports/2026-05-comparative/) — canonical report archive
+
 ## Run the tests
 
 ```bash

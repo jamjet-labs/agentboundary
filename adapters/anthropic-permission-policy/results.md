@@ -118,4 +118,5 @@ The runtime mechanism is significantly richer than AGT or Cloudflare. The portab
 
 ## Right-to-respond
 
-Findings will be sent to Anthropic before W12 publication.
+Filed 2026-05-23 on the Claude Agent SDK Python repository:
+**[`anthropics/claude-agent-sdk-python#986`](https://github.com/anthropics/claude-agent-sdk-python/issues/986)**. Corrections received within 7 days are incorporated; later corrections appear inline with date stamps.

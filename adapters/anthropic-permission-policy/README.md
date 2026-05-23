@@ -9,7 +9,7 @@ This directory maps Anthropic's Claude Agent SDK permission system onto AgentBou
 - `https://platform.claude.com/docs/en/managed-agents/overview` (Managed Agents overview)
 - Managed Agents beta header: `managed-agents-2026-04-01`
 
-**Right to respond:** findings will be filed to Anthropic before the W12 comparative report publishes.
+**Right to respond:** an issue was filed against the Claude Agent SDK Python repository before publication of the comparative report. Corrections received during the 7-day window will be reflected in `results.md`; corrections received after publication are added inline with a date stamp.
 
 ## Files in this directory
 

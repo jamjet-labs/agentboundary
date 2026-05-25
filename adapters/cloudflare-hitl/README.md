@@ -8,7 +8,7 @@ This directory maps the Cloudflare Agents SDK's human-in-the-loop primitive onto
 - `https://developers.cloudflare.com/agents/guides/human-in-the-loop/`
 - `https://github.com/cloudflare/agents/blob/main/guides/human-in-the-loop/README.md`
 
-**Right to respond:** a summary of these findings will be filed against `cloudflare/agents` before the W12 comparative report publishes. Corrections received during the 7-day window are reflected in `results.md`; later corrections appear inline with date stamps.
+**Right to respond:** an issue summarising these findings was filed against `cloudflare/agents` ([#1571](https://github.com/cloudflare/agents/issues/1571)) before publication of the comparative report. The maintainer closed the issue the same day after a brief "what is the ask?" exchange. Corrections received after publication are added inline with a date stamp.
 
 ## Files in this directory
 

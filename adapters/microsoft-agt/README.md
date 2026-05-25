@@ -4,7 +4,7 @@ This directory maps Microsoft AGT's governance event model onto AgentBoundary v0
 
 **Scope:** docs-only evaluation against the AGT v1.0 specification (`microsoft/agent-governance-toolkit` main branch, `docs/specs/AUDIT-COMPLIANCE-1.0.md`, fetched 2026-05-21). No runtime account was provisioned; results reflect what AGT's own published schema and example payloads document, not whether a particular AGT deployment chooses to populate non-required metadata.
 
-**Right to respond:** an open comment was filed against the AGT repository before publication of the comparative report. Corrections received during the 7-day window will be reflected in `results.md`; corrections received after publication are added inline with a date stamp.
+**Right to respond:** an issue was filed against `microsoft/agent-governance-toolkit` ([#2449](https://github.com/microsoft/agent-governance-toolkit/issues/2449)) before publication of the comparative report. The maintainer acknowledged five schema gaps as legitimate; companion PRs [#2473](https://github.com/microsoft/agent-governance-toolkit/pull/2473) (merged) and [#2532](https://github.com/microsoft/agent-governance-toolkit/pull/2532) (open) add the missing fields. Corrections received after publication are added inline with a date stamp.
 
 ## Files in this directory
 

@@ -9,7 +9,7 @@ This directory maps LangSmith's Run object (and Gateway policy events) onto Agen
 - `https://www.langchain.com/blog/introducing-llm-gateway`
 - LangSmith Fleet (agent identity / ABAC) — private beta, partial public docs
 
-**Right to respond:** a summary of these findings will be filed against LangChain before the W12 comparative report publishes.
+**Right to respond:** an issue summarising these findings was filed against `langchain-ai/langsmith-sdk` ([#2919](https://github.com/langchain-ai/langsmith-sdk/issues/2919)) before publication of the comparative report. Corrections received during the 7-day window will be reflected in `results.md`; corrections received after publication are added inline with a date stamp.
 
 ## Files in this directory
 

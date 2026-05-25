@@ -57,18 +57,20 @@ jobs:
       - name: Build wheel + sdist
         run: uv build
 
-      - name: Verify wheel content (10 scenarios + schema + meta-schema)
+      - name: Verify wheel content (scenarios + schemas + meta-schema)
         run: |
           WHEEL=$(ls dist/agentboundary-*.whl)
           unzip -l "$WHEEL"
+          EXPECTED=$(ls scenarios/*.yaml | wc -l | tr -d ' ')
           SCENARIO_COUNT=$(unzip -l "$WHEEL" | grep -c "_data/scenarios/.*\.yaml$" || true)
-          if [ "$SCENARIO_COUNT" -ne 10 ]; then
-            echo "::error::Wheel must bundle exactly 10 scenarios, found $SCENARIO_COUNT"
+          if [ "$SCENARIO_COUNT" -ne "$EXPECTED" ]; then
+            echo "::error::Wheel must bundle $EXPECTED scenarios (matching scenarios/ in repo), found $SCENARIO_COUNT"
             exit 1
           fi
-          unzip -l "$WHEEL" | grep -q "_data/action-receipt-v0.1.json" || (echo "::error::Wheel missing main schema"; exit 1)
+          unzip -l "$WHEEL" | grep -q "_data/action-receipt-v0.1.json" || (echo "::error::Wheel missing v0.1 schema"; exit 1)
+          unzip -l "$WHEEL" | grep -q "_data/action-receipt-v0.2-alpha.json" || (echo "::error::Wheel missing v0.2-alpha schema"; exit 1)
           unzip -l "$WHEEL" | grep -q "scenarios/_meta-schema.json" || (echo "::error::Wheel missing meta-schema"; exit 1)
-          echo "Wheel content verified."
+          echo "Wheel content verified: $SCENARIO_COUNT scenarios + v0.1 + v0.2-alpha schemas + meta-schema."
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

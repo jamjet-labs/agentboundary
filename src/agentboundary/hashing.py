@@ -12,12 +12,13 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-import rfc8785
+import rfc8785  # type: ignore[import-untyped]  # no stubs published
 
 
 def canonical_json(value: Any) -> str:
     """Serialize ``value`` to AgentBoundary canonical JSON form (RFC 8785)."""
-    return rfc8785.dumps(value).decode("utf-8")
+    canonical: bytes = rfc8785.dumps(value)
+    return canonical.decode("utf-8")
 
 
 def sha256_hex(text: str) -> str:

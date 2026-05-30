@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-import rfc8785  # type: ignore[import-untyped]  # no stubs published
+import rfc8785
 
 
 def canonical_json(value: Any) -> str:

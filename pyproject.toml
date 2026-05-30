@@ -87,6 +87,7 @@ dependencies = [
     "click>=8.1",
     "PyYAML>=6.0",
     "types-PyYAML",
+    "rfc8785>=0.1.4",
 ]
 
 [tool.hatch.envs.lint.scripts]

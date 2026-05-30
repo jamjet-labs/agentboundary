@@ -37,6 +37,34 @@ class TestCanonicalJson:
         assert a == b
 
 
+class TestCanonicalJsonIsRFC8785:
+    """Canonicalization MUST be RFC 8785 (JSON Canonicalization Scheme).
+
+    Ad-hoc ``json.dumps(sort_keys=True)`` diverges from JCS on number
+    formatting and non-BMP key ordering, so two spec-compliant verifiers can
+    disagree on the same receipt's hash. See spec §4.8 / §4.12.
+    """
+
+    def test_integer_valued_float_drops_decimal_point(self) -> None:
+        # RFC 8785 §3.2.2.3 serializes 50.0 as "50"; json.dumps emits "50.0".
+        assert canonical_json({"amount": 50.0}) == '{"amount":50}'
+
+    def test_lone_integer_valued_float(self) -> None:
+        assert canonical_json({"x": 1.0}) == '{"x":1}'
+
+    def test_matches_rfc8785_reference_vectors(self) -> None:
+        import rfc8785
+
+        for value in (
+            {"amount": 50.0, "b": 1},
+            {"x": 1.0},
+            {"k": "café"},
+            {"a": [1, 2, 3]},
+            {"\U0001f600": 1, "a": 2},
+        ):
+            assert canonical_json(value) == rfc8785.dumps(value).decode("utf-8")
+
+
 class TestSha256Hex:
     def test_known_vector_empty_string(self) -> None:
         assert sha256_hex("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

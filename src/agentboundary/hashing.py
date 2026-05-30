@@ -17,8 +17,10 @@ import rfc8785
 
 def canonical_json(value: Any) -> str:
     """Serialize ``value`` to AgentBoundary canonical JSON form (RFC 8785)."""
-    canonical: bytes = rfc8785.dumps(value)
-    return canonical.decode("utf-8")
+    # ``bytes(...)`` pins the type to a concrete ``bytes`` regardless of how
+    # rfc8785 annotates ``dumps`` (older releases return ``Any``), so mypy
+    # --strict does not flag ``no-any-return`` on the decode.
+    return bytes(rfc8785.dumps(value)).decode("utf-8")
 
 
 def sha256_hex(text: str) -> str:

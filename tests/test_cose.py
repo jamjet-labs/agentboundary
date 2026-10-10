@@ -447,6 +447,16 @@ class TestSignedStatement:
         env = sign_payload(protected, {HDR_CWT_CLAIMS: {1: "i", 2: "s"}}, _payload(receipt), key)
         assert _codes(verify_envelope(env, keyring)) == {"COSE_CWT_CLAIMS_DUPLICATED"}
 
+    @pytest.mark.parametrize("as_statement", [False, True])
+    def test_attached_transparency_receipt_is_reported_not_checked(
+        self, receipt: dict, key: Any, keyring: Keyring, as_statement: bool
+    ) -> None:
+        protected = build_protected_header(KID, issuer="i", subject="s")
+        env = sign_payload(protected, {394: [b"\xd2\x84"]}, _payload(receipt), key)
+        res = verify_envelope(env, keyring, as_signed_statement=as_statement)
+        assert res.ok
+        assert _status(res, "scitt.transparency_receipt") == "not_checked"
+
     def test_issuer_needs_subject(self) -> None:
         with pytest.raises(ValueError, match="both issuer and subject"):
             build_protected_header(KID, issuer="i")

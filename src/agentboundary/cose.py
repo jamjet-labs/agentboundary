@@ -561,6 +561,15 @@ def verify_envelope(
 
     checks.append(_check_signature(protected_bytes, payload, signature, kid, keyring))
 
+    if SCITT_RECEIPTS in unprotected:
+        checks.append(
+            not_checked(
+                "scitt.transparency_receipt",
+                "a Transparency Receipt (header 394) is attached; this verifier does not "
+                "check inclusion or consistency proofs",
+            )
+        )
+
     if as_signed_statement:
         checks.extend(_check_signed_statement(protected, unprotected, bucket, res))
     return res
@@ -635,7 +644,11 @@ def _check_signed_statement(
     if isinstance(iss, str) and iss and isinstance(sub, str) and sub:
         res.issuer, res.subject = iss, sub
         out.append(
-            passed("scitt.cwt_claims", f"protected CWT Claims carry iss={iss!r} and sub={sub!r}")
+            passed(
+                "scitt.cwt_claims",
+                f"protected CWT Claims carry iss={iss!r} and sub={sub!r}; iss is "
+                "issuer-asserted, not bound to the signing key by this verifier",
+            )
         )
     else:
         out.append(
@@ -656,15 +669,7 @@ def _check_signed_statement(
                 "a Signed Statement without x5t/x5chain needs kid in the protected header",
             )
         )
-    if SCITT_RECEIPTS in unprotected:
-        out.append(
-            not_checked(
-                "scitt.transparency_receipt",
-                "a Transparency Receipt (label 394) is attached; this verifier does not "
-                "check inclusion proofs",
-            )
-        )
-    else:
+    if SCITT_RECEIPTS not in unprotected:
         out.append(
             not_checked(
                 "scitt.registration",

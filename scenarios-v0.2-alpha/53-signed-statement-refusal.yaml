@@ -1,0 +1,40 @@
+name: 53-signed-statement-refusal
+description: |
+  A denial receipt signed into an envelope with the RFC 9943 Signed
+  Statement header shape: protected CWT Claims with iss and sub, and kid
+  in the protected header. Checked as a Signed Statement, it passes. It is
+  not registered anywhere; the verifier reports registration as not checked.
+setup:
+  receipt_version: agentboundary/v0.2-alpha
+  now: "2026-06-15T14:23:00Z"
+  envelope:
+    kid: scenario-test-key
+    # TEST KEY ONLY: a fixed, public seed so the suite is deterministic.
+    seed_hex: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    issuer: "https://emitter.example"
+    subject: "agent:claude-code:receipts"
+    as_signed_statement: true
+  policies:
+    - name: agentboundary.repo.merges.locked
+      version: "1"
+      rule: deny
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+expect:
+  decision: deny
+  conformance_level: 4
+  receipt_must_validate: true
+  assertions:
+    - { field: refusal.verdict, equals: deny }

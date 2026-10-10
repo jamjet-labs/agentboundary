@@ -62,6 +62,7 @@ packages = ["src/agentboundary"]
 "docs/receipts/spring-service-mutation.json" = "agentboundary/_data/examples/spring-service-mutation.json"
 "docs/receipts/stripe-refund.json" = "agentboundary/_data/examples/stripe-refund.json"
 "scenarios" = "agentboundary/_data/scenarios"
+"scenarios-v0.2-alpha" = "agentboundary/_data/scenarios-v0.2-alpha"
 "src/agentboundary/scenarios/_meta-schema.json" = "agentboundary/scenarios/_meta-schema.json"
 
 [tool.hatch.envs.default]

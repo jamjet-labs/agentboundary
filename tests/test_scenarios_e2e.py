@@ -10,6 +10,7 @@ import pytest
 from agentboundary.conformance import check_conformance
 from agentboundary.runtime import ReferenceImplementation
 from agentboundary.scenarios import load_scenarios_dir
+from agentboundary.scenarios.envelope import envelope_failure_codes
 from agentboundary.validator import validate_receipt
 
 
@@ -22,7 +23,11 @@ def _scenarios_dir() -> Path:
 
 
 def _scenarios() -> list[Any]:
-    return load_scenarios_dir(_scenarios_dir())
+    # The frozen v0.1 suite, then the v0.2-alpha draft scenarios. The draft
+    # ones live in a sibling directory so a released runner pointed at
+    # scenarios/ never meets setup keys its meta-schema does not know.
+    draft = _scenarios_dir().parent / "scenarios-v0.2-alpha"
+    return load_scenarios_dir(_scenarios_dir()) + load_scenarios_dir(draft)
 
 
 _SCENARIOS = _scenarios()
@@ -95,6 +100,7 @@ def test_scenario_runs_to_its_declared_expectation(scenario) -> None:
             prior_receipt_hashes=prior_receipt_hashes,
         )
         actual_fails = {c.code for c in checks if c.severity == "fail"}
+        actual_fails |= envelope_failure_codes(scenario.setup, scenario.action, receipt)
         for code in expect.get("failures_must_include", []):
             if code == "SCHEMA_INVALID":
                 continue  # already asserted above
@@ -104,3 +110,11 @@ def test_scenario_runs_to_its_declared_expectation(scenario) -> None:
         # If the scenario expects no failures, there must be none.
         if not expect.get("failures_must_include"):
             assert not actual_fails, f"{scenario.name}: unexpected failures {actual_fails}"
+
+
+def test_harness_runs_both_suites() -> None:
+    root = _scenarios_dir().parent
+    expected = len(list((root / "scenarios").glob("[0-9]*.yaml"))) + len(
+        list((root / "scenarios-v0.2-alpha").glob("[0-9]*.yaml"))
+    )
+    assert len(_SCENARIOS) == expected

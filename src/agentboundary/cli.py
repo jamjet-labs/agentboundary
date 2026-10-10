@@ -14,6 +14,7 @@ from agentboundary import __version__
 from agentboundary.conformance import check_conformance
 from agentboundary.runtime import ReferenceImplementation, RuntimeOutcome
 from agentboundary.scenarios import Scenario, load_scenario, load_scenarios_dir
+from agentboundary.scenarios.envelope import envelope_failure_codes
 from agentboundary.validator import validate_receipt
 
 
@@ -167,6 +168,10 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
 
     required_codes = set(expect.get("failures_must_include", []))
     actual_fail_codes = {c.code for c in checks if c.severity == "fail"}
+    if outcome.receipt is not None:
+        actual_fail_codes |= envelope_failure_codes(
+            scenario.setup, scenario.action, outcome.receipt
+        )
     if schema_errors:
         actual_fail_codes.add("SCHEMA_INVALID")
 
@@ -231,7 +236,7 @@ def _summarise(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _format_matrix(results: list[dict[str, Any]]) -> str:
     lines = [
-        f"AgentBoundary v0.1 conformance suite — {len(results)} scenarios",
+        f"AgentBoundary conformance suite — {len(results)} scenarios",
         "",
     ]
     for r in results:

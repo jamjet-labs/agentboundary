@@ -1,0 +1,33 @@
+name: 51-envelope-unknown-kid
+description: |
+  The envelope names a kid the verifier's keyring does not hold. The
+  verifier does not guess a key; the signature is unresolved.
+setup:
+  envelope:
+    kid: scenario-test-key
+    # TEST KEY ONLY: a fixed, public seed so the suite is deterministic.
+    seed_hex: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    keyring_kid: some-other-key
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["COSE_KID_UNRESOLVED"]

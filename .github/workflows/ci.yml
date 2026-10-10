@@ -130,3 +130,31 @@ jobs:
         run: pip install --upgrade pip hatch
       - name: Run slow tests (wheel install)
         run: hatch test -m slow
+
+  npm-pin-loads-scenarios:
+    name: npm wrapper pin loads scenarios/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the exact Python version the npm wrapper pins (from PyPI)
+        run: |
+          PIN="$(node -p "require('./npm/bin/agentboundary.js').PINNED_VERSION")"
+          echo "npm wrapper pins agentboundary==$PIN"
+          python -m venv /tmp/pinned
+          /tmp/pinned/bin/pip install "agentboundary==$PIN"
+      - name: Pinned release must load every scenario in the tree
+        run: |
+          /tmp/pinned/bin/python -c "
+          from pathlib import Path
+          from agentboundary.scenarios.loader import load_scenarios_dir
+          n = len(load_scenarios_dir(Path('scenarios')))
+          expected = len(list(Path('scenarios').glob('*.yaml')))
+          assert n == expected, (n, expected)
+          print('pinned release loaded', n, 'scenarios')
+          "

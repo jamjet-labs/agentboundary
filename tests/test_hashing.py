@@ -119,3 +119,37 @@ def test_worked_example_receipt_hash_is_canonical(slug: str) -> None:
     assert receipt["receipt_hash"] == compute_receipt_hash(receipt), (
         f"{slug}.json receipt_hash does not match canonical SHA-256 of its body"
     )
+
+
+class TestParseJsonStrict:
+    """The verifier's parser rejects what json.loads silently accepts."""
+
+    def test_accepts_ordinary_json(self) -> None:
+        from agentboundary.hashing import parse_json_strict
+
+        assert parse_json_strict('{"a": [1, "\\ud83d\\ude00", null]}') == {"a": [1, "😀", None]}
+        assert parse_json_strict(b'{"a": 1}') == {"a": 1}
+
+    @pytest.mark.parametrize(
+        ("text", "match"),
+        [
+            ('{"a": 1, "a": 2}', "duplicate"),
+            ('{"x": {"a": 1, "a": 1}}', "duplicate"),
+            ('{"__proto__": {}}', "forbidden"),
+            ('{"x": [{"constructor": 1}]}', "forbidden"),
+            ('{"prototype": 1}', "forbidden"),
+            ('{"a": NaN}', "non-finite"),
+            ('{"a": Infinity}', "non-finite"),
+            ('{"a": -Infinity}', "non-finite"),
+            ('{"a": "\\ud800"}', "surrogate"),
+            ('{"\\udc00": 1}', "surrogate"),
+            ('["ok", ["\\ud800"]]', "surrogate"),
+            ("{", "invalid JSON"),
+            (b"\xff\xfe", "UTF-8"),
+        ],
+    )
+    def test_rejects(self, text: str | bytes, match: str) -> None:
+        from agentboundary.hashing import StrictJSONError, parse_json_strict
+
+        with pytest.raises(StrictJSONError, match=match):
+            parse_json_strict(text)

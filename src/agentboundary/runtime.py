@@ -99,6 +99,7 @@ class ReferenceImplementation(Implementation):
             executed=executed,
             approval=approval_for_cap,
             seed_receipt_id=setup.get("seed_receipt_id"),
+            now=setup.get("now"),
         )
 
         for op in action.get("inject", []):
@@ -128,6 +129,7 @@ def _build_receipt(
     executed: bool,
     approval: dict[str, Any] | None,
     seed_receipt_id: str | None = None,
+    now: str | None = None,
 ) -> dict[str, Any]:
     """Assemble an Action Receipt for the given action + policy outcome.
 
@@ -138,11 +140,16 @@ def _build_receipt(
     approval block — in that case ``policy_decision="require-approval"``
     while ``RuntimeOutcome.decision="allow"``. Scenarios depend on the
     bifurcation; do not flatten it.
+
+    ``now`` pins the clock (an RFC 3339 string) for ``issued_at`` and
+    ``execution.completed_at``. Scenarios that test a time window set it so
+    the outcome does not depend on when the suite runs.
     """
+    stamp = now or _now_rfc3339()
     receipt: dict[str, Any] = {
         "version": "agentboundary/v0.1",
         "receipt_id": seed_receipt_id or str(uuid.uuid4()),
-        "issued_at": _now_rfc3339(),
+        "issued_at": stamp,
         "actor": action["actor"],
         "agent": action["agent"],
         "tool": action["tool"],
@@ -181,7 +188,7 @@ def _build_receipt(
     if executed:
         receipt["execution"] = {
             "status": "success",
-            "completed_at": _now_rfc3339(),
+            "completed_at": stamp,
             "result_ref": f"ref:{receipt['receipt_id'][:8]}",
         }
     else:
@@ -189,7 +196,7 @@ def _build_receipt(
         # execution block with status=blocked so receipts have a uniform shape.
         receipt["execution"] = {
             "status": "blocked",
-            "completed_at": _now_rfc3339(),
+            "completed_at": stamp,
         }
     receipt["receipt_hash"] = compute_receipt_hash(receipt)
     return receipt

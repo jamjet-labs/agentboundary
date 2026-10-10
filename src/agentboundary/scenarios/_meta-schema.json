@@ -57,6 +57,11 @@
           "items": { "type": "string", "format": "uuid" }
         },
         "seed_receipt_id": { "type": "string", "format": "uuid" },
+        "now": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Pins the reference implementation's clock (issued_at, execution.completed_at) so time-window scenarios do not depend on when the suite runs."
+        },
         "minimum_completeness": {
           "type": "number",
           "minimum": 0.0,

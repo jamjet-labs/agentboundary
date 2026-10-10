@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any
 
 import rfc8785
@@ -47,6 +48,8 @@ def compute_receipt_hash(receipt: dict[str, Any]) -> str:
 # object. draft-noa-scitt-ai-agent-receipt-01 section 3.2 rejects them at the
 # parse boundary of every document a verifier reads; we do the same so a
 # receipt or keyring that is safe here is safe for a JavaScript verifier too.
+MAX_SAFE_INTEGER = 2**53 - 1
+
 FORBIDDEN_MEMBER_NAMES = frozenset({"__proto__", "prototype", "constructor"})
 
 
@@ -83,10 +86,33 @@ def parse_json_strict(text: str | bytes) -> Any:
     def reject_constant(name: str) -> Any:
         raise StrictJSONError(f"non-finite number {name} is not permitted")
 
+    def parse_float(literal: str) -> float:
+        value = float(literal)
+        if not math.isfinite(value):
+            raise StrictJSONError(f"non-finite number {literal[:20]} is not permitted")
+        return value
+
+    def parse_int(literal: str) -> int:
+        # RFC 8785 serializes numbers as IEEE 754 doubles, so integers past
+        # 2**53 - 1 cannot be canonicalized; reject them here, before
+        # int() meets Python's digit limit on a hostile literal.
+        digits = literal.lstrip("-")
+        if len(digits) > 16 or int(literal) > MAX_SAFE_INTEGER or int(literal) < -MAX_SAFE_INTEGER:
+            raise StrictJSONError(f"integer {literal[:20]} is outside the range JCS can represent")
+        return int(literal)
+
     try:
-        value = json.loads(text, object_pairs_hook=pairs_hook, parse_constant=reject_constant)
+        value = json.loads(
+            text,
+            object_pairs_hook=pairs_hook,
+            parse_constant=reject_constant,
+            parse_float=parse_float,
+            parse_int=parse_int,
+        )
     except json.JSONDecodeError as exc:
         raise StrictJSONError(f"invalid JSON: {exc}") from exc
+    except RecursionError as exc:
+        raise StrictJSONError("document nests too deeply") from exc
     _reject_lone_surrogates(value)
     return value
 

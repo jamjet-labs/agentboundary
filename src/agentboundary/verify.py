@@ -41,8 +41,9 @@ NOT_CHECKED_STATEMENTS: tuple[str, ...] = (
     "Transparency Service was consulted.",
     "Unicode normalization (NFC) of strings is not checked; strings are hashed as received.",
     "Ed25519 is verified by OpenSSL (through the cryptography package) plus "
-    "this verifier's own checks on S and on the public key; which verification "
-    "equation OpenSSL applies, cofactored or cofactorless, is not pinned.",
+    "this verifier's own checks on S and on the public key. The project's tests "
+    "hold it to the cofactorless equation with one known vector; that is a test "
+    "of the installed library, not a proof.",
 )
 
 # Conformance codes the receipt-level checks already report under their own
@@ -72,6 +73,7 @@ class ReceiptReport:
     issuer: str | None = None
     subject: str | None = None
     signature_verified: bool = False
+    key_fingerprint: str | None = None
 
     @property
     def receipt_id(self) -> str | None:
@@ -162,11 +164,25 @@ def verify_items(
     as_signed_statement: bool = False,
     require_signature: bool = False,
 ) -> VerifyReport:
-    """Verify each item, then the chain they form in presentation order."""
+    """Verify each item, then the chain they form in presentation order.
+
+    Supplying a keyring means the caller expects signed receipts, so it
+    implies ``require_signature``: otherwise an unsigned receipt could be
+    slipped into a signed chain and pass.
+    """
+    require_signature = require_signature or keyring is not None
     report = VerifyReport()
     for item in items:
-        report.receipts.append(_verify_one(item, keyring, as_signed_statement, require_signature))
-    report.chain = _chain_checks(report.receipts)
+        try:
+            rr = _verify_one(item, keyring, as_signed_statement, require_signature)
+        except Exception as exc:  # last line of defence: report, never crash
+            rr = ReceiptReport(item.source, item.form)
+            rr.checks.append(failed("internal", "VERIFIER_ERROR", f"{type(exc).__name__}: {exc}"))
+        report.receipts.append(rr)
+    try:
+        report.chain = _chain_checks(report.receipts)
+    except Exception as exc:
+        report.chain = [failed("chain", "VERIFIER_ERROR", f"{type(exc).__name__}: {exc}")]
     return report
 
 
@@ -192,6 +208,7 @@ def _verify_one(
         rr.signature_verified = any(
             c.name == "cose.signature" and c.status == "pass" for c in env.checks
         )
+        rr.key_fingerprint = env.key_fingerprint
         if env.payload is None:
             return rr
         receipt = _receipt_from_payload(env.payload, checks)
@@ -223,7 +240,7 @@ def _verify_one(
             failed(
                 "signature.required",
                 "SIGNATURE_REQUIRED",
-                "--require-signature was given and no signature was verified",
+                "a signature was required (--require-signature, or --keys) and none was verified",
             )
         )
     checks.extend(_receipt_checks(receipt))
@@ -239,7 +256,14 @@ def _receipt_from_payload(payload: bytes, checks: list[Check]) -> dict[str, Any]
     if not isinstance(value, dict):
         checks.append(failed("payload.json", "PAYLOAD_INVALID", "payload is not a JSON object"))
         return None
-    if canonical_json(value).encode("utf-8") != payload:
+    try:
+        canonical = canonical_json(value).encode("utf-8")
+    except Exception as exc:  # rfc8785 refuses e.g. integers beyond 2**53
+        checks.append(
+            failed("payload.json", "PAYLOAD_INVALID", f"payload cannot be canonicalized: {exc}")
+        )
+        return None
+    if canonical != payload:
         checks.append(
             failed(
                 "payload.canonical",
@@ -316,6 +340,8 @@ def _receipt_checks(receipt: dict[str, Any]) -> list[Check]:
 
 
 def _chain_checks(reports: list[ReceiptReport]) -> list[Check]:
+    if not reports:
+        return [failed("chain", "NO_RECEIPTS", "the input held no receipts; nothing was verified")]
     if len(reports) < 2:
         detail = "one receipt presented; there is no chain to check"
         if reports and isinstance((reports[0].receipt or {}).get("prior_receipt"), dict):
@@ -374,13 +400,15 @@ def _chain_checks(reports: list[ReceiptReport]) -> list[Check]:
     else:
         out.append(passed("chain.links", f"{len(receipts) - 1} link(s) match"))
 
-    seen: dict[Any, dict[str, Any]] = {}
+    seen: dict[str, dict[str, Any]] = {}
     dups: list[str] = []
     for r in receipts:
         rid = r.get("receipt_id")
+        if not isinstance(rid, str):
+            continue  # the schema check has already failed this receipt
         if rid in seen:
-            same = canonical_json(seen[rid]) == canonical_json(r)
-            dups.append(f"{rid!r} ({'byte-identical copy' if same else 'different content'})")
+            same = seen[rid] == r
+            dups.append(f"{rid!r} ({'identical copy' if same else 'different content'})")
         else:
             seen[rid] = r
     if dups:
@@ -393,16 +421,30 @@ def _chain_checks(reports: list[ReceiptReport]) -> list[Check]:
 
 
 def _signer_continuity(reports: list[ReceiptReport]) -> Check:
-    signed = [r for r in reports if r.form == "cose" and r.kid is not None]
+    """One signing key per actor, judged by the key that actually verified.
+
+    Comparing kid strings is not enough: two keys can share a kid in the
+    keyring, and an unverified envelope's kid is an attacker-chosen header.
+    So only receipts with a verified signature count, keyed by fingerprint.
+    """
+    signed = [r for r in reports if r.signature_verified and r.key_fingerprint is not None]
     if len(signed) < 2:
-        return not_checked("chain.signer", "fewer than two signed receipts; nothing to compare")
-    kids_by_actor: dict[Any, set[str]] = {}
+        return not_checked(
+            "chain.signer", "fewer than two receipts with a verified signature; nothing to compare"
+        )
+    keys_by_actor: dict[str, set[str]] = {}
     for r in signed:
-        actor_id = ((r.receipt or {}).get("actor") or {}).get("id")
-        assert r.kid is not None
-        kids_by_actor.setdefault(actor_id, set()).add(r.kid)
-    split = {a: k for a, k in kids_by_actor.items() if len(k) > 1}
+        actor = (r.receipt or {}).get("actor")
+        actor_id = actor.get("id") if isinstance(actor, dict) else None
+        if not isinstance(actor_id, str) or r.key_fingerprint is None:
+            continue  # the schema check has already failed this receipt
+        keys_by_actor.setdefault(actor_id, set()).add(r.key_fingerprint)
+    split = {a: k for a, k in keys_by_actor.items() if len(k) > 1}
     if split:
-        detail = "; ".join(f"actor {a!r} signed under {sorted(k)}" for a, k in split.items())
+        detail = "; ".join(
+            f"actor {a!r} signed by {len(k)} different keys "
+            f"({', '.join('sha256:' + f[:16] for f in sorted(k))})"
+            for a, k in split.items()
+        )
         return failed("chain.signer", "CHAIN_KEY_DISCONTINUITY", detail)
-    return passed("chain.signer", "each actor's receipts are signed under one kid")
+    return passed("chain.signer", "each actor's receipts are signed by one key")

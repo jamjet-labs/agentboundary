@@ -260,7 +260,10 @@ def _format_matrix(results: list[dict[str, Any]]) -> str:
     "--keys",
     "keys_path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="JWK Set of trusted Ed25519 public keys. Without it, signatures are not checked.",
+    help=(
+        "JWK Set of trusted Ed25519 public keys. Implies --require-signature. "
+        "Without it, signatures are not checked."
+    ),
 )
 @click.option(
     "--signed-statement",
@@ -431,14 +434,23 @@ def keygen(kid: str, private_path: Path, public_path: Path) -> None:
 
     if not kid:
         raise click.UsageError("--kid must be non-empty")
+    if private_path.resolve() == public_path.resolve():
+        raise click.UsageError("--private and --public must be different files")
     for p in (private_path, public_path):
         if p.exists():
             raise click.UsageError(f"{p} exists; refusing to overwrite")
     key = Ed25519PrivateKey.generate()
+    # O_EXCL on both files: neither write may replace a file that appeared
+    # after the checks above. If the public write fails, remove the private
+    # key so no half-made key pair is left behind.
     fd = os.open(private_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(_json.dumps(private_jwk(key, kid), indent=2) + "\n")
-    public_path.write_text(
-        _json.dumps({"keys": [public_jwk(key, kid)]}, indent=2) + "\n", encoding="utf-8"
-    )
+    try:
+        fd = os.open(public_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(_json.dumps({"keys": [public_jwk(key, kid)]}, indent=2) + "\n")
+    except OSError as exc:
+        private_path.unlink(missing_ok=True)
+        raise click.ClickException(f"could not write {public_path}: {exc}") from exc
     click.echo(f"wrote {private_path} (private, keep it secret) and {public_path} (public)")

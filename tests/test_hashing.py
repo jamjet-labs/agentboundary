@@ -153,3 +153,30 @@ class TestParseJsonStrict:
 
         with pytest.raises(StrictJSONError, match=match):
             parse_json_strict(text)
+
+
+class TestParseJsonStrictReviewFindings:
+    @pytest.mark.parametrize(
+        ("text", "match"),
+        [
+            ('{"a": 1e400}', "non-finite"),
+            ('{"a": 9007199254740992}', "outside"),
+            ('{"a": -9007199254740992}', "outside"),
+            ('{"a": ' + "9" * 5000 + "}", "outside"),
+            ("[" * 100000, "nest"),
+        ],
+    )
+    def test_rejects_without_crashing(self, text: str, match: str) -> None:
+        from agentboundary.hashing import StrictJSONError, parse_json_strict
+
+        with pytest.raises(StrictJSONError, match=match):
+            parse_json_strict(text)
+
+    def test_edge_of_safe_integer_range_is_accepted(self) -> None:
+        from agentboundary.hashing import parse_json_strict
+
+        assert parse_json_strict("[9007199254740991, -9007199254740991, 1.5]") == [
+            9007199254740991,
+            -9007199254740991,
+            1.5,
+        ]

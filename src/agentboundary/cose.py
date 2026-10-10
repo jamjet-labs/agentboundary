@@ -28,9 +28,11 @@ order, a public key whose y-coordinate is not a canonical field element,
 and the eight small-order public key encodings. That last check matters:
 ``cryptography`` loads small-order keys, and with OpenSSL 4.0.3 it accepted
 a forged signature (R = identity, S = 0) over an arbitrary message under the
-identity key (see ``tests/test_cose.py``). Which Ed25519 verification
-equation OpenSSL applies (cofactored or cofactorless) is not pinned here;
-draft-noa-scitt-ai-agent-receipt-01 pins the cofactorless one.
+identity key (see ``tests/test_cose.py``). draft-noa-scitt-ai-agent-receipt-01
+pins the cofactorless verification equation; this module does not implement
+the equation itself, but a regression test holds the verifier to it by
+checking that a signature valid only under the cofactored equation is
+rejected.
 """
 
 from __future__ import annotations
@@ -368,6 +370,7 @@ class EnvelopeResult:
     kid_bucket: str | None = None
     issuer: str | None = None
     subject: str | None = None
+    key_fingerprint: str | None = None  # SHA-256 hex of the public key that verified
 
     @property
     def ok(self) -> bool:
@@ -456,11 +459,24 @@ def verify_envelope(
     if not isinstance(protected, Mapping):
         checks.append(failed("cose.protected", "COSE_STRUCTURE", "protected header is not a map"))
         return res
+    for bucket_name, header in (("protected", protected), ("unprotected", unprotected)):
+        if not all(_is_label(k) for k in header):
+            # cbor2 decodes CBOR true as Python True, and True == 1, so a
+            # bool key would answer a lookup for label 1 (alg).
+            checks.append(
+                failed(
+                    "cose.protected",
+                    "COSE_STRUCTURE",
+                    f"{bucket_name} header labels must be integers or text strings "
+                    "(RFC 9052 section 3)",
+                )
+            )
+            return res
     try:
         reencoded = encode_deterministic(protected)
-    except NotEncodableError as exc:
+    except Exception as exc:  # NotEncodableError, or RecursionError on a cyclic value
         reencoded = None
-        why = str(exc)
+        why = str(exc) or type(exc).__name__
     if reencoded != protected_bytes:
         checks.append(
             failed(
@@ -474,8 +490,17 @@ def verify_envelope(
         return res
     checks.append(passed("cose.protected", "protected header uses deterministic encoding"))
 
-    # Algorithm: exactly -19 in the protected bucket.
+    # Algorithm: exactly -19 in the protected bucket, and nowhere else.
     alg = protected.get(HDR_ALG)
+    if HDR_ALG in unprotected:
+        checks.append(
+            failed(
+                "cose.alg",
+                "COSE_ALG_REJECTED",
+                "alg appears in the unprotected header; it must be protected only",
+            )
+        )
+        return res
     if type(alg) is not int or alg != ALG_ED25519:
         checks.append(
             failed(
@@ -500,9 +525,7 @@ def verify_envelope(
             or isinstance(crit, (bytes, str))
             or not crit
             or any(
-                not isinstance(label, (int, str))
-                or label not in protected
-                or label not in _UNDERSTOOD_HEADERS
+                not _is_label(label) or label not in protected or label not in _UNDERSTOOD_HEADERS
                 for label in crit
             )
         )
@@ -554,12 +577,21 @@ def verify_envelope(
     checks.append(passed("cose.kid", f"kid {kid!r} from the {bucket} header{note}"))
 
     content_type = protected.get(HDR_CONTENT_TYPE)
-    if content_type is None:
-        checks.append(not_checked("cose.content_type", "no protected content type"))
-    else:
+    if content_type == CONTENT_TYPE:
         checks.append(passed("cose.content_type", f"protected content type {content_type!r}"))
+    else:
+        checks.append(
+            not_checked(
+                "cose.content_type",
+                f"content type is {content_type!r}, not {CONTENT_TYPE!r}; "
+                "the payload is still checked as a receipt",
+            )
+        )
 
-    checks.append(_check_signature(protected_bytes, payload, signature, kid, keyring))
+    sig_check, res.key_fingerprint = _check_signature(
+        protected_bytes, payload, signature, kid, keyring
+    )
+    checks.append(sig_check)
 
     if SCITT_RECEIPTS in unprotected:
         checks.append(
@@ -575,60 +607,94 @@ def verify_envelope(
     return res
 
 
+def _is_label(value: Any) -> bool:
+    """RFC 9052 header labels are integers or text strings; bool is neither."""
+    return type(value) is int or type(value) is str
+
+
+def _signature_encoding_problem(signature: bytes) -> str | None:
+    if len(signature) != 64:
+        return f"Ed25519 signature must be 64 bytes, got {len(signature)}"
+    if not int.from_bytes(signature[32:], "little") < _L:
+        return "signature S is not reduced modulo the group order"
+    return None
+
+
+def _ed25519_verify(public_key: bytes, signature: bytes, message: bytes) -> bool:
+    """Verify with every check this module applies on top of OpenSSL."""
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    if check_public_key(public_key) is not None:
+        return False
+    if _signature_encoding_problem(signature) is not None:
+        return False
+    try:
+        Ed25519PublicKey.from_public_bytes(public_key).verify(signature, message)
+    except InvalidSignature:
+        return False
+    return True
+
+
 def _check_signature(
     protected_bytes: bytes,
     payload: bytes,
     signature: bytes,
     kid: str,
     keyring: Keyring | None,
-) -> Check:
-    from cryptography.exceptions import InvalidSignature
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+) -> tuple[Check, str | None]:
+    """Return the signature check and, on success, the verifying key's fingerprint."""
+    import hashlib
 
     name = "cose.signature"
+    # Key-independent encoding rules apply whether or not a keyring was given.
+    problem = _signature_encoding_problem(signature)
+    if problem is not None:
+        return failed(name, "COSE_SIGNATURE_INVALID", problem), None
     if keyring is None:
-        return not_checked(name, "no keyring supplied; the signature was not verified")
+        return not_checked(name, "no keyring supplied; the signature was not verified"), None
     candidates = keyring.lookup(kid)
     if not candidates:
-        return failed(name, "COSE_KID_UNRESOLVED", f"kid {kid!r} is not in the keyring")
-    if len(signature) != 64:
-        return failed(name, "COSE_SIGNATURE_INVALID", "Ed25519 signature must be 64 bytes")
-    if not int.from_bytes(signature[32:], "little") < _L:
-        return failed(
-            name, "COSE_SIGNATURE_INVALID", "signature S is not reduced modulo the group order"
-        )
+        return failed(name, "COSE_KID_UNRESOLVED", f"kid {kid!r} is not in the keyring"), None
     message = sig_structure(protected_bytes, payload)
-    verified = 0
+    verified: list[bytes] = []
     rejected_keys: list[str] = []
     for entry in candidates:
-        problem = check_public_key(entry.public_key)
-        if problem is not None:
-            rejected_keys.append(problem)
+        key_problem = check_public_key(entry.public_key)
+        if key_problem is not None:
+            rejected_keys.append(key_problem)
             continue
-        try:
-            Ed25519PublicKey.from_public_bytes(entry.public_key).verify(signature, message)
-        except InvalidSignature:
-            continue
-        verified += 1
+        if _ed25519_verify(entry.public_key, signature, message):
+            verified.append(entry.public_key)
     if rejected_keys and len(rejected_keys) == len(candidates):
-        return failed(name, "COSE_KEY_REJECTED", "; ".join(rejected_keys))
-    if verified == 0:
-        return failed(
-            name, "COSE_SIGNATURE_INVALID", f"Ed25519 signature does not verify under kid {kid!r}"
+        return failed(name, "COSE_KEY_REJECTED", "; ".join(rejected_keys)), None
+    if not verified:
+        return (
+            failed(
+                name,
+                "COSE_SIGNATURE_INVALID",
+                f"Ed25519 signature does not verify under kid {kid!r}",
+            ),
+            None,
         )
-    if verified > 1:
-        return failed(
-            name,
-            "COSE_KID_AMBIGUOUS",
-            f"kid {kid!r} matched {verified} keys that all verify; refusing to choose",
+    if len(verified) > 1:
+        return (
+            failed(
+                name,
+                "COSE_KID_AMBIGUOUS",
+                f"kid {kid!r} matched {len(verified)} keys that all verify; refusing to choose",
+            ),
+            None,
         )
+    fingerprint = hashlib.sha256(verified[0]).hexdigest()
     if len(candidates) > 1:
-        return passed(
-            name,
-            f"verified under kid {kid!r}; kid is ambiguous in the keyring "
-            f"({len(candidates)} keys tried, exactly one verified)",
+        detail = (
+            f"verified under kid {kid!r} by key sha256:{fingerprint[:16]}; kid is ambiguous "
+            f"in the keyring ({len(candidates)} keys tried, exactly one verified)"
         )
-    return passed(name, f"Ed25519 signature verifies under kid {kid!r}")
+    else:
+        detail = f"Ed25519 signature verifies under kid {kid!r}"
+    return passed(name, detail), fingerprint
 
 
 def _check_signed_statement(
@@ -639,8 +705,9 @@ def _check_signed_statement(
 ) -> list[Check]:
     out: list[Check] = []
     claims = protected.get(HDR_CWT_CLAIMS)
-    iss = claims.get(CWT_ISS) if isinstance(claims, Mapping) else None
-    sub = claims.get(CWT_SUB) if isinstance(claims, Mapping) else None
+    iss = sub = None
+    if isinstance(claims, Mapping) and all(_is_label(k) for k in claims):
+        iss, sub = claims.get(CWT_ISS), claims.get(CWT_SUB)
     if isinstance(iss, str) and iss and isinstance(sub, str) and sub:
         res.issuer, res.subject = iss, sub
         out.append(

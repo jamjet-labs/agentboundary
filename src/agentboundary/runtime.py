@@ -8,6 +8,7 @@ out of the box. Third-party implementations plug in as additional
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -127,7 +128,7 @@ class ReferenceImplementation(Implementation):
             policy=policy,
             policy_decision=rule,
             executed=executed,
-            approval=approval_for_cap,
+            approval=_recordable(approval_for_cap),
             seed_receipt_id=setup.get("seed_receipt_id"),
             now=stamp,
             version=V02_ALPHA if emit_v02 else V01,
@@ -140,29 +141,69 @@ class ReferenceImplementation(Implementation):
         return RuntimeOutcome(decision=decision, receipt=receipt, arguments=arguments)
 
 
+def _recordable(approval: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return ``approval`` if the receipt can record it faithfully, else None.
+
+    A receipt's approval block needs an approver with a non-empty string id
+    and a string timestamp. An approval without them never authorizes
+    anything (the approver check refuses it) and is left out of the receipt
+    rather than recorded in a shape the schema rejects.
+    """
+    if not isinstance(approval, dict):
+        return None
+    approver = approval.get("approver")
+    ok = (
+        isinstance(approver, dict)
+        and isinstance(approver.get("id"), str)
+        and bool(approver.get("id"))
+        and isinstance(approval.get("approved_at"), str)
+    )
+    return approval if ok else None
+
+
+# How far an approval may postdate the runtime's clock before it is refused.
+# A small allowance absorbs skew between the approval system and the runtime;
+# beyond it, a forward-dated approval would stretch the window without limit.
+APPROVAL_CLOCK_SKEW_SECONDS: Final = 60
+
+
 def _approval_problem(
     policy: dict[str, Any], approval: dict[str, Any], now: str
 ) -> dict[str, str] | None:
     """Return a refusal if ``approval`` does not authorize the action under ``policy``.
 
     Checks the approver list first (who), then the approval window (when).
-    Every guard is written so that a value it cannot evaluate (an
-    unparseable timestamp, a NaN window) refuses rather than passes.
+    Every guard is written positively, so a value it cannot evaluate (a
+    missing or non-string id, an unparseable timestamp, a NaN or non-numeric
+    window) refuses rather than passes.
     """
     approvers = policy.get("approvers")
-    if isinstance(approvers, list) and approvers:
-        allowed = {a.get("id") for a in approvers if isinstance(a, dict)}
-        if (approval.get("approver") or {}).get("id") not in allowed:
+    if approvers is not None:
+        allowed = {
+            a.get("id")
+            for a in (approvers if isinstance(approvers, list) else [])
+            if isinstance(a, dict) and isinstance(a.get("id"), str) and a.get("id")
+        }
+        approver = approval.get("approver")
+        approver_id = approver.get("id") if isinstance(approver, dict) else None
+        if not (isinstance(approver_id, str) and approver_id in allowed):
             return {"verdict": "deny", "reason_code": "approver-not-authorized"}
 
     max_age = policy.get("approval_max_age_seconds")
     if max_age is not None:
+        usable = (type(max_age) is int and max_age >= 0) or (
+            type(max_age) is float and math.isfinite(max_age) and max_age >= 0
+        )
+        if not usable:
+            return {"verdict": "deny", "reason_code": "approval-window-invalid"}
         approved_at = _parse_rfc3339(approval.get("approved_at"))
         current = _parse_rfc3339(now)
         if approved_at is None or current is None:
             return {"verdict": "deny", "reason_code": "approval-time-unreadable"}
         age = (current - approved_at).total_seconds()
-        if not age <= float(max_age):
+        if not age >= -APPROVAL_CLOCK_SKEW_SECONDS:
+            return {"verdict": "deny", "reason_code": "approval-postdates-action"}
+        if not age <= max_age:
             return {"verdict": "expired", "reason_code": "approval-window-elapsed"}
     return None
 

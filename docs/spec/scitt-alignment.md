@@ -90,7 +90,7 @@ The draft defines two presentations: a bare receipt (payload plus its native sig
 | Algorithm | Protected `alg` = -19 (Ed25519, RFC 9864); every other value rejected, including -8 | Same |
 | Key identifier | `kid` required; SHOULD be protected; MAY be unprotected; verifier reports which bucket it used | Same. The signer puts `kid` in the protected header. An unprotected `kid` is used to find a key and is reported as such. |
 | `kid` decoding | No lossy decode | `kid` must be UTF-8; anything else is refused |
-| Several keys under one `kid` | Try each; accept only if exactly one verifies; report the ambiguity | Same |
+| Several keys under one `kid` | Try each; accept only if exactly one verifies; report the ambiguity | Same. The chain signer check compares the fingerprint of the key that verified, so a shared `kid` cannot hide a second signer. |
 | Protected header encoding | RFC 8949 §4.2.1 deterministic; others rejected | Same |
 | `crit` | Unlisted unknown headers ignored; listed ones must be understood | Same |
 | Payload | Attached; detached rejected | Same |
@@ -98,8 +98,8 @@ The draft defines two presentations: a bare receipt (payload plus its native sig
 | `external_aad` | Empty | Empty |
 | Ed25519 key checks | Ed25519 key only; non-canonical y rejected; eight small-order keys rejected | Same |
 | Signature encoding | Canonical; S reduced mod L | S reduced mod L is checked; the 64-byte signature is carried raw in COSE, so the base64 rules for `sig.value` do not apply |
-| Verification equation | Pinned to cofactorless `[S]B = R + [k]A'` | Not pinned: verified by OpenSSL through `cryptography`, plus the key and S checks above |
-| Content type | SHOULD be protected; no media type registered | `application/vnd.agentboundary.receipt+json`, protected. Not a registered media type. |
+| Verification equation | Pinned to cofactorless `[S]B = R + [k]A'` | Not implemented here: OpenSSL (through `cryptography`) verifies, plus the key and S checks above. A regression test rejects a signature valid only under the cofactored equation, which holds the installed library to cofactorless behaviour for that vector. |
+| Content type | SHOULD be protected; no media type registered | `application/vnd.agentboundary.receipt+json`, protected. Not a registered media type. Any other value is reported, not passed. |
 
 ## 5. Signed Statements and registration
 
@@ -146,5 +146,5 @@ What is **not** done:
 - A policy content commitment (the draft's optional `governance.compliance`).
 - A chain identifier, tenant, and sequence number.
 - Checkpoints, so no detection of a truncated tail.
-- A pinned Ed25519 verification equation.
+- An Ed25519 verification equation pinned in its own code (it relies on OpenSSL, held to cofactorless behaviour by one test vector).
 - Integer-only numbers and a required NFC form.

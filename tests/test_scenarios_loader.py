@@ -127,3 +127,49 @@ class TestSuiteShape:
         drafts = re.findall(r"(?<![\w.])(\d+) v0\.2-alpha (?:draft )?scenarios\b", readme)
         assert drafts
         assert {int(n) for n in drafts} == {draft}
+
+
+class TestMetaSchemaEnvelopeRules:
+    """Scenarios the envelope harness cannot run must fail at load time."""
+
+    _BASE = """\
+name: t
+setup:
+  envelope:
+    kid: k
+    seed_hex: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+{extra_setup}  policies:
+    - {{ name: p, version: "1", rule: allow, capabilities: [c] }}
+action:
+  actor: {{ type: agent, id: a }}
+  agent: {{ framework: f, framework_version: "1", model: m }}
+  tool: {{ name: t, capability: c }}
+  target: {{ system: s, environment: prod }}
+  arguments: {{}}
+{extra_action}expect: {{}}
+"""
+
+    @pytest.mark.parametrize(
+        ("extra_setup", "extra_action"),
+        [
+            ("    issuer: i\n", ""),
+            ("    subject: s\n", ""),
+            ("", "  envelope_inject:\n    - { op: resign_with_alg }\n"),
+            ("", "  envelope_inject:\n    - { op: replace_in_payload, find: a }\n"),
+        ],
+    )
+    def test_rejected_at_load(self, tmp_path: Path, extra_setup: str, extra_action: str) -> None:
+        path = tmp_path / "t.yaml"
+        path.write_text(self._BASE.format(extra_setup=extra_setup, extra_action=extra_action))
+        with pytest.raises(ValueError, match="meta-schema"):
+            load_scenario(path)
+
+    def test_complete_envelope_scenario_loads(self, tmp_path: Path) -> None:
+        path = tmp_path / "t.yaml"
+        path.write_text(
+            self._BASE.format(
+                extra_setup="    issuer: i\n    subject: s\n",
+                extra_action="  envelope_inject:\n    - { op: resign_with_alg, alg: -8 }\n",
+            )
+        )
+        assert load_scenario(path).name == "t"

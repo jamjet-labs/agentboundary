@@ -139,7 +139,11 @@ class TestSingleReceipt:
     def test_envelope_with_bad_signature_fails(self, keyring: Any) -> None:
         r = json.loads(EXAMPLE.read_text())
         items = load_items([_cose(r, private_key_from_seed(OTHER_SEED))])
-        assert _codes(verify_items(items, keyring)) == {"COSE_SIGNATURE_INVALID"}
+        # a keyring implies a signature is required, so both are reported
+        assert _codes(verify_items(items, keyring)) == {
+            "COSE_SIGNATURE_INVALID",
+            "SIGNATURE_REQUIRED",
+        }
 
     def test_non_canonical_payload_is_rejected(self, key: Any, keyring: Any) -> None:
         from agentboundary.cose import build_protected_header, sign_payload
@@ -446,3 +450,91 @@ class TestCli:
 def test_canonical_payload_helper_matches_sign() -> None:
     r = json.loads(EXAMPLE.read_text())
     assert canonical_json(r).encode() == canonical_json(json.loads(canonical_json(r))).encode()
+
+
+class TestReviewFindings:
+    """Regressions for the adversarial review and Copilot findings on PR #5."""
+
+    def test_kid_collision_cannot_hide_a_second_signer(self, key: Any) -> None:
+        mal = private_key_from_seed(OTHER_SEED)
+        ring = load_keyring({"keys": [public_jwk(key, KID), public_jwk(mal, KID)]})
+        a, b, c = _chain(3)
+        items = load_items(
+            [
+                ("a.cose", sign_receipt(a, key, KID)),
+                ("b.cose", sign_receipt(b, mal, KID)),
+                ("c.cose", sign_receipt(c, key, KID)),
+            ]
+        )
+        assert "CHAIN_KEY_DISCONTINUITY" in _codes(verify_items(items, ring))
+
+    def test_signer_continuity_needs_verified_signatures(self, key: Any) -> None:
+        other = private_key_from_seed(OTHER_SEED)
+        chain = _chain(2)
+        items = load_items(
+            [
+                ("0.cose", sign_receipt(chain[0], key, KID)),
+                ("1.cose", sign_receipt(chain[1], other, KID)),
+            ]
+        )
+        report = verify_items(items, None)
+        assert _status(report.chain, "chain.signer") == "not_checked"
+
+    @pytest.mark.parametrize(("name", "data"), [("e.json", b"[]"), ("e.jsonl", b"\n\n")])
+    def test_empty_input_fails(self, name: str, data: bytes) -> None:
+        report = verify_items(load_items([(name, data)]), None)
+        assert _codes(report) == {"NO_RECEIPTS"}
+
+    def test_keys_imply_every_receipt_must_be_signed(self, key: Any, keyring: Any) -> None:
+        a, b, c = _chain(3)
+        items = load_items(
+            [
+                ("a.cose", sign_receipt(a, key, KID)),
+                ("b.json", json.dumps(b).encode()),
+                ("c.cose", sign_receipt(c, key, KID)),
+            ]
+        )
+        assert _codes(verify_items(items, keyring)) == {"SIGNATURE_REQUIRED"}
+
+    @pytest.mark.parametrize("payload", [b'{"a":1e400}', b'{"a":1152921504606846976}'])
+    def test_out_of_range_payload_numbers_are_reported(
+        self, key: Any, keyring: Any, payload: bytes
+    ) -> None:
+        from agentboundary.cose import build_protected_header, sign_payload
+
+        env = sign_payload(build_protected_header(KID), {}, payload, key)
+        assert "PAYLOAD_INVALID" in _codes(verify_items(load_items([("x.cose", env)]), keyring))
+
+    def test_deeply_nested_bare_file_is_reported(self) -> None:
+        report = verify_items(load_items([("d.json", b"[" * 100000)]), None)
+        assert _codes(report) == {"JSON_INVALID"}
+
+    @pytest.mark.parametrize(
+        "mutate",
+        [
+            lambda r: r.update(receipt_id=["x"]),
+            lambda r: r.update(actor="agent"),
+            lambda r: r["actor"].update(id=["x"]),
+            lambda r: r.update(receipt_id={"a": 1}),
+        ],
+    )
+    def test_schema_invalid_chain_members_do_not_crash(
+        self, key: Any, keyring: Any, mutate: Any
+    ) -> None:
+        chain = _chain(3)
+        for r in chain:
+            mutate(r)
+        items = load_items([(f"{i}.cose", sign_receipt(r, key, KID)) for i, r in enumerate(chain)])
+        report = verify_items(items, keyring)
+        assert "SCHEMA_INVALID" in _codes(report)
+
+    def test_keygen_rejects_one_path_for_both_files(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        same = tmp_path / "k.json"
+        result = runner.invoke(
+            main, ["keygen", "--kid", "k1", "--private", str(same), "--public", str(same)]
+        )
+        assert result.exit_code == 2
+        assert "different files" in result.output
+        assert not same.exists()

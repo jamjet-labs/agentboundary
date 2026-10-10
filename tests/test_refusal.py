@@ -301,7 +301,7 @@ class TestRuntimeV02Refusals:
         setup["approvals"] = [_approval()]
         decision, r = _attempt(setup)
         assert decision == "deny"
-        assert r["refusal"]["verdict"] == "expired"
+        assert r["refusal"] == {"verdict": "deny", "reason_code": "approval-window-invalid"}
 
     def test_unreadable_approval_time_fails_closed(self) -> None:
         setup = _setup("require-approval", approval_max_age_seconds=60)
@@ -393,3 +393,64 @@ class TestSpecPathClaims:
         blocks = section.split("```")[1::2]
         listed = {tok for block in blocks for tok in block.split()}
         assert listed == set(ALL_PROVENANCE_PATHS)
+
+
+class TestRuntimeApprovalGuardsFailClosed:
+    """Regressions for the adversarial review: every approval guard in the
+    v0.2-alpha runtime refuses on input it cannot evaluate."""
+
+    def _refusal(self, approval: dict, **policy: Any) -> dict | None:
+        setup = _setup("require-approval", **policy)
+        setup["approvals"] = [approval]
+        outcome = ReferenceImplementation().attempt(copy.deepcopy(ACTION), setup=setup)
+        assert outcome.receipt is not None
+        return outcome.receipt.get("refusal")
+
+    def test_forward_dated_approval_is_refused(self) -> None:
+        refusal = self._refusal(_approval(at="2027-06-15T14:23:00Z"), approval_max_age_seconds=60)
+        assert refusal == {"verdict": "deny", "reason_code": "approval-postdates-action"}
+
+    def test_small_clock_skew_is_tolerated(self) -> None:
+        refusal = self._refusal(_approval(at="2026-06-15T14:23:30Z"), approval_max_age_seconds=60)
+        assert refusal is None
+
+    def test_approver_entry_without_id_matches_nobody(self) -> None:
+        approval = {"capability": "test.cap", "approver": {"type": "human"}, "approved_at": NOW}
+        refusal = self._refusal(approval, approvers=[{"type": "human"}])
+        assert refusal == {"verdict": "deny", "reason_code": "approver-not-authorized"}
+
+    def test_bool_id_does_not_match_int_id(self) -> None:
+        approval = {"capability": "test.cap", "approver": {"id": True}, "approved_at": NOW}
+        refusal = self._refusal(approval, approvers=[{"id": 1}])
+        assert refusal == {"verdict": "deny", "reason_code": "approver-not-authorized"}
+
+    @pytest.mark.parametrize("approver", ["bob", ["x"], None])
+    def test_malformed_approver_is_refused(self, approver: Any) -> None:
+        approval = {"capability": "test.cap", "approver": approver, "approved_at": NOW}
+        refusal = self._refusal(approval, approvers=[{"id": "bob"}])
+        assert refusal == {"verdict": "deny", "reason_code": "approver-not-authorized"}
+
+    @pytest.mark.parametrize("window", ["abc", True, float("inf"), -1, [60]])
+    def test_unusable_window_is_refused(self, window: Any) -> None:
+        refusal = self._refusal(_approval(), approval_max_age_seconds=window)
+        assert refusal == {"verdict": "deny", "reason_code": "approval-window-invalid"}
+
+    def test_huge_integer_window_does_not_crash(self) -> None:
+        assert self._refusal(_approval(), approval_max_age_seconds=10**400) is None
+
+
+class TestRuntimeApproverIdEdges:
+    def _refusal(self, approver: Any, approvers: list[Any]) -> Any:
+        setup = _setup("require-approval", approvers=approvers)
+        setup["approvals"] = [{"capability": "test.cap", "approver": approver, "approved_at": NOW}]
+        outcome = ReferenceImplementation().attempt(copy.deepcopy(ACTION), setup=setup)
+        assert outcome.receipt is not None
+        return outcome.receipt.get("refusal")
+
+    def test_empty_id_matches_nobody(self) -> None:
+        refusal = self._refusal({"id": ""}, [{"id": ""}])
+        assert refusal == {"verdict": "deny", "reason_code": "approver-not-authorized"}
+
+    def test_unhashable_id_is_refused_not_crashed(self) -> None:
+        refusal = self._refusal({"id": ["x"]}, [{"id": "x"}])
+        assert refusal == {"verdict": "deny", "reason_code": "approver-not-authorized"}

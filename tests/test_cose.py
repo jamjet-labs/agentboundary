@@ -460,3 +460,93 @@ class TestSignedStatement:
     def test_issuer_needs_subject(self) -> None:
         with pytest.raises(ValueError, match="both issuer and subject"):
             build_protected_header(KID, issuer="i")
+
+
+class TestReviewFindings:
+    """Regressions for the adversarial review and Copilot findings on PR #5."""
+
+    def test_bool_key_does_not_stand_in_for_alg(
+        self, receipt: dict, key: Any, keyring: Keyring
+    ) -> None:
+        # {4: kid, true: -19}: no integer label 1, so no alg. cbor2 decodes
+        # true as Python True, and True == 1.
+        protected = b"\xa2\x04" + encode_deterministic(KID.encode()) + b"\xf5\x32"
+        env = _raw_envelope(protected, {}, _payload(receipt), key)
+        assert _codes(verify_envelope(env, keyring)) == {"COSE_STRUCTURE"}
+
+    def test_bool_key_in_cwt_claims_is_rejected(
+        self, receipt: dict, key: Any, keyring: Keyring
+    ) -> None:
+        protected = build_protected_header(KID)
+        protected[HDR_CWT_CLAIMS] = {True: "iss-x", 2: "sub"}
+        env = sign_payload(protected, {}, _payload(receipt), key)
+        res = verify_envelope(env, keyring, as_signed_statement=True)
+        assert "SCITT_CWT_CLAIMS_MISSING" in _codes(res)
+        assert res.issuer is None
+
+    def test_bool_crit_label_is_rejected(self, receipt: dict, key: Any, keyring: Keyring) -> None:
+        protected = build_protected_header(KID)
+        protected[HDR_CRIT] = [True]
+        env = sign_payload(protected, {}, _payload(receipt), key)
+        assert _codes(verify_envelope(env, keyring)) == {"COSE_CRIT_UNSUPPORTED"}
+
+    def test_alg_in_unprotected_bucket_is_rejected(
+        self, receipt: dict, key: Any, keyring: Keyring
+    ) -> None:
+        env = sign_payload(build_protected_header(KID), {HDR_ALG: -8}, _payload(receipt), key)
+        assert _codes(verify_envelope(env, keyring)) == {"COSE_ALG_REJECTED"}
+
+    def test_cyclic_protected_header_does_not_crash(self, keyring: Keyring) -> None:
+        protected = b"\xd8\x1c\xa1\x01\xd8\x1d\x00"  # map {1: itself}, via tags 28/29
+        env = cbor2.dumps(cbor2.CBORTag(18, [protected, {}, b"{}", bytes(64)]))
+        assert "COSE_PROTECTED_NOT_DETERMINISTIC" in _codes(verify_envelope(env, keyring))
+
+    @pytest.mark.parametrize("sig", [b"", bytes(63)])
+    def test_bad_signature_length_fails_without_keyring(self, receipt: dict, sig: bytes) -> None:
+        protected = encode_deterministic(build_protected_header(KID))
+        env = cbor2.dumps(cbor2.CBORTag(18, [protected, {}, _payload(receipt), sig]))
+        assert _codes(verify_envelope(env, None)) == {"COSE_SIGNATURE_INVALID"}
+
+    def test_non_reduced_s_fails_without_keyring(self, receipt: dict) -> None:
+        protected = encode_deterministic(build_protected_header(KID))
+        bad = bytes(32) + (L + 1).to_bytes(32, "little")
+        env = cbor2.dumps(cbor2.CBORTag(18, [protected, {}, _payload(receipt), bad]))
+        assert _codes(verify_envelope(env, None)) == {"COSE_SIGNATURE_INVALID"}
+
+    def test_foreign_content_type_is_not_reported_as_pass(
+        self, receipt: dict, key: Any, keyring: Keyring
+    ) -> None:
+        protected = build_protected_header(KID, content_type="application/json")
+        res = verify_envelope(sign_payload(protected, {}, _payload(receipt), key), keyring)
+        assert _status(res, "cose.content_type") == "not_checked"
+
+    def test_verified_key_fingerprint_is_recorded(
+        self, receipt: dict, key: Any, keyring: Keyring
+    ) -> None:
+        import hashlib
+
+        res = verify_envelope(sign_receipt(receipt, key, KID), keyring)
+        assert res.key_fingerprint == hashlib.sha256(keyring.entries[0].public_key).hexdigest()
+        assert verify_envelope(sign_receipt(receipt, key, KID), None).key_fingerprint is None
+
+    def test_signature_valid_only_under_cofactored_equation_is_rejected(self) -> None:
+        """R carries an order-8 component; [8][S]B = [8]R + [8][k]A holds and
+        [S]B = R + [k]A does not. Pins that the verifier behaves cofactorless,
+        as draft-noa-scitt-ai-agent-receipt-01 section 4.2 requires."""
+        from agentboundary.cose import _ed25519_verify
+
+        a = bytes.fromhex("03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8")
+        sig = bytes.fromhex(
+            "e277e99d6c85b59bcfb69acb0b82e20806fe382e4c29bd935a321059ef6e4277"
+            "807c2ebf7ca665cd27d8a812b30e29ce4ce37a213832586e55b6513c3d9b6d0f"
+        )
+        assert _ed25519_verify(a, sig, b"hello") is False
+
+
+def test_ed25519_helper_refuses_small_order_key_on_its_own() -> None:
+    """The helper must not rely on its caller having checked the key:
+    OpenSSL accepts R = identity, S = 0 under the identity key."""
+    from agentboundary.cose import _ed25519_verify
+
+    identity = bytes.fromhex("01" + "00" * 31)
+    assert _ed25519_verify(identity, identity + bytes(32), b"anything") is False

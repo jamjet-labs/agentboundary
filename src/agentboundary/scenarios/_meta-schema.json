@@ -78,6 +78,10 @@
               "description": "kid the verifier's keyring lists the key under (default: kid)."
             },
             "as_signed_statement": { "type": "boolean" }
+          },
+          "dependentRequired": {
+            "issuer": ["subject"],
+            "subject": ["issuer"]
           }
         },
         "now": {
@@ -141,7 +145,17 @@
               "alg": { "type": "integer" },
               "find": { "type": "string", "minLength": 1 },
               "replace": { "type": "string", "minLength": 1 }
-            }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "op": { "const": "resign_with_alg" } } },
+                "then": { "required": ["alg"] }
+              },
+              {
+                "if": { "properties": { "op": { "const": "replace_in_payload" } } },
+                "then": { "required": ["find", "replace"] }
+              }
+            ]
           }
         },
         "inject": {

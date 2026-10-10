@@ -99,7 +99,7 @@ dependencies = [
 style = "ruff check {args:src tests}"
 fmt = "ruff format {args:src tests}"
 type = "mypy --strict src/agentboundary"
-all = ["style", "fmt --check", "type"]
+all = ["style", "fmt --check src tests", "type"]
 
 [tool.ruff]
 line-length = 100

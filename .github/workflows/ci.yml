@@ -39,7 +39,7 @@ jobs:
       - name: Ruff (style + format check)
         run: |
           hatch run lint:style
-          hatch run lint:fmt --check
+          hatch run lint:fmt --check src tests
       - name: Mypy (strict types)
         run: hatch run lint:type
 

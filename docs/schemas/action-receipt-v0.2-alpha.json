@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentboundary.jamjet.dev/schemas/action-receipt-v0.2-alpha.json",
   "title": "AgentBoundary Action Receipt v0.2-alpha",
-  "description": "v0.2-alpha extends v0.1 with two optional fields — provenance and completeness_score — that let an emitter self-report which receipt fields it observed directly vs inferred vs synthesized at translation time. The score is deterministically computable from provenance; a verifier MUST recompute. See docs/spec/v0.2-alpha.md for normative semantics.",
+  "description": "v0.2-alpha extends v0.1 with optional fields: provenance and completeness_score (an emitter self-reports which receipt fields it observed directly vs inferred vs synthesized; a verifier MUST recompute the score), prior_receipt (chain link), and refusal (what was NOT allowed). It also requires approval only when a require-approval action proceeded. See docs/spec/v0.2-alpha.md for normative semantics.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -136,6 +136,23 @@
         "result_ref": { "type": "string" }
       }
     },
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict"],
+      "description": "Present when the action was refused at the action boundary and did not run. Records what was NOT allowed: 'deny' (policy or approver refused), 'require-approval' (approval was required and not given), 'expired' (an approval or escalation window lapsed). A receipt carrying refusal MUST have execution.status=blocked (conformance check LEVEL_2_REFUSAL_EXECUTED). See docs/spec/v0.2-alpha.md section 2.3.",
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["deny", "require-approval", "expired"]
+        },
+        "reason_code": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Implementation-defined machine-readable reason, e.g. policy-deny, approval-missing, approver-not-authorized, approval-window-elapsed."
+        }
+      }
+    },
     "prior_receipt": {
       "type": "object",
       "additionalProperties": false,
@@ -180,7 +197,9 @@
         "execution.error_code": { "$ref": "#/$defs/provenanceValue" },
         "execution.result_ref": { "$ref": "#/$defs/provenanceValue" },
         "prior_receipt.receipt_id": { "$ref": "#/$defs/provenanceValue" },
-        "prior_receipt.receipt_hash": { "$ref": "#/$defs/provenanceValue" }
+        "prior_receipt.receipt_hash": { "$ref": "#/$defs/provenanceValue" },
+        "refusal.verdict": { "$ref": "#/$defs/provenanceValue" },
+        "refusal.reason_code": { "$ref": "#/$defs/provenanceValue" }
       }
     },
     "completeness_score": {
@@ -204,12 +223,18 @@
   "allOf": [
     {
       "if": {
-        "required": ["policy"],
+        "required": ["policy", "execution"],
         "properties": {
           "policy": {
             "required": ["decision"],
             "properties": {
               "decision": { "const": "require-approval" }
+            }
+          },
+          "execution": {
+            "required": ["status"],
+            "properties": {
+              "status": { "enum": ["success", "failure"] }
             }
           }
         }

@@ -29,6 +29,10 @@ def main() -> None:
 
     Validate an existing receipt JSON:
         agentboundary validate path/to/receipt.json
+
+    Verify receipts, envelopes or a chain offline:
+        agentboundary verify receipt.json
+        agentboundary verify --keys keys.jwks r1.cose r2.cose r3.cose
     """
 
 
@@ -241,3 +245,195 @@ def _format_matrix(results: list[dict[str, Any]]) -> str:
     lines.append("")
     lines.append(f"  {passed} passed · {failed} failed · {total}ms total")
     return "\n".join(lines)
+
+
+@main.command()
+@click.argument(
+    "paths", nargs=-1, required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option(
+    "--keys",
+    "keys_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="JWK Set of trusted Ed25519 public keys. Without it, signatures are not checked.",
+)
+@click.option(
+    "--signed-statement",
+    is_flag=True,
+    help="Also require the RFC 9943 Signed Statement header shape (CWT iss/sub, protected kid).",
+)
+@click.option(
+    "--require-signature",
+    is_flag=True,
+    help="Fail any receipt whose signature was not verified.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def verify(
+    paths: tuple[Path, ...],
+    keys_path: Path | None,
+    signed_statement: bool,
+    require_signature: bool,
+    as_json: bool,
+) -> None:
+    """Verify receipts offline: hashes, canonical form, signatures, chain.
+
+    Each PATH is a receipt JSON file, a JSON array of receipts, a .jsonl file,
+    or a COSE_Sign1 envelope. Several receipts are checked as one chain in
+    the order given. No network access; nothing is sent anywhere.
+
+    Exit status: 0 when every check that ran passed, 1 when one failed,
+    2 on a usage error (such as an unusable keyring).
+    """
+    from agentboundary.cose import KeyringError, load_keyring
+    from agentboundary.hashing import StrictJSONError, parse_json_strict
+    from agentboundary.verify import load_items, verify_items
+
+    keyring = None
+    if keys_path is not None:
+        try:
+            keyring = load_keyring(parse_json_strict(keys_path.read_bytes()))
+        except (KeyringError, StrictJSONError) as exc:
+            raise click.UsageError(f"--keys {keys_path}: {exc}") from exc
+
+    items = load_items((str(p), p.read_bytes()) for p in paths)
+    report = verify_items(
+        items,
+        keyring,
+        as_signed_statement=signed_statement,
+        require_signature=require_signature,
+    )
+    if as_json:
+        click.echo(_json.dumps(report.to_dict(), indent=2))
+    else:
+        click.echo(_format_verify(report, keyring is not None))
+    sys.exit(0 if report.ok else 1)
+
+
+def _format_verify(report: Any, have_keys: bool) -> str:
+    marks = {"pass": "PASS", "fail": "FAIL", "not_checked": "----"}
+    lines = ["AgentBoundary offline verifier (no network access)", ""]
+    if not have_keys:
+        lines += ["No --keys given: signatures are reported as not checked.", ""]
+    for r in report.receipts:
+        rid = f"  receipt_id {r.receipt_id}" if r.receipt_id else ""
+        lines.append(f"{r.source}  [{r.form}]{rid}")
+        for c in r.checks:
+            code = f"{c.code}: " if c.code else ""
+            lines.append(f"  {marks[c.status]}  {c.name:<34s} {code}{c.detail}")
+        lines.append("")
+    lines.append(f"chain ({len(report.receipts)} item(s), in the order given)")
+    for c in report.chain:
+        code = f"{c.code}: " if c.code else ""
+        lines.append(f"  {marks[c.status]}  {c.name:<34s} {code}{c.detail}")
+    lines += ["", "Not checked by this verifier, whatever the input:"]
+    lines += [f"  - {s}" for s in report.not_checked]
+    failures = sum(
+        1
+        for c in [*report.chain, *(c for r in report.receipts for c in r.checks)]
+        if c.status == "fail"
+    )
+    lines.append("")
+    if report.ok:
+        lines.append("Result: PASS (every check that ran passed; read 'not checked' above)")
+    else:
+        lines.append(f"Result: FAIL ({failures} failed check(s))")
+    return "\n".join(lines)
+
+
+@main.command()
+@click.argument("receipt_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--key",
+    "key_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Ed25519 private key as a JWK (from 'agentboundary keygen').",
+)
+@click.option(
+    "-o",
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Where to write the envelope (default: RECEIPT_PATH + '.cose').",
+)
+@click.option("--issuer", help="CWT iss claim; with --subject, makes a Signed Statement shape.")
+@click.option("--subject", help="CWT sub claim, e.g. the emitter's receipt stream id.")
+def sign(
+    receipt_path: Path,
+    key_path: Path,
+    out_path: Path | None,
+    issuer: str | None,
+    subject: str | None,
+) -> None:
+    """Wrap a receipt in a COSE_Sign1 envelope signed with Ed25519.
+
+    Refuses a receipt that is not schema-valid or whose receipt_hash does
+    not match, so a signature never vouches for a broken record.
+    """
+    from agentboundary.cose import KeyringError, load_private_jwk, sign_receipt
+    from agentboundary.hashing import StrictJSONError, compute_receipt_hash, parse_json_strict
+
+    if (issuer is None) != (subject is None):
+        raise click.UsageError("--issuer and --subject go together")
+    try:
+        private_key, kid = load_private_jwk(parse_json_strict(key_path.read_bytes()))
+    except (KeyringError, StrictJSONError) as exc:
+        raise click.UsageError(f"--key {key_path}: {exc}") from exc
+    try:
+        receipt = parse_json_strict(receipt_path.read_bytes())
+    except StrictJSONError as exc:
+        click.echo(f"{receipt_path}: {exc}", err=True)
+        sys.exit(1)
+    if not isinstance(receipt, dict):
+        click.echo(f"{receipt_path}: a receipt must be a JSON object", err=True)
+        sys.exit(1)
+    errors = validate_receipt(receipt)
+    if errors:
+        click.echo(f"{receipt_path}: not schema-valid, refusing to sign: {errors[0]}", err=True)
+        sys.exit(1)
+    if compute_receipt_hash(receipt) != receipt.get("receipt_hash"):
+        click.echo(f"{receipt_path}: receipt_hash does not match, refusing to sign", err=True)
+        sys.exit(1)
+    envelope = sign_receipt(receipt, private_key, kid, issuer=issuer, subject=subject)
+    target = out_path or receipt_path.with_name(receipt_path.name + ".cose")
+    target.write_bytes(envelope)
+    click.echo(f"wrote {target} ({len(envelope)} bytes, kid {kid!r})")
+
+
+@main.command()
+@click.option("--kid", required=True, help="Key identifier to embed in envelopes.")
+@click.option(
+    "--private",
+    "private_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Where to write the private JWK (created with mode 0600).",
+)
+@click.option(
+    "--public",
+    "public_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Where to write the public JWK Set to hand to verifiers.",
+)
+def keygen(kid: str, private_path: Path, public_path: Path) -> None:
+    """Generate an Ed25519 signing key (private JWK + public JWK Set)."""
+    import os
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from agentboundary.cose import private_jwk, public_jwk
+
+    if not kid:
+        raise click.UsageError("--kid must be non-empty")
+    for p in (private_path, public_path):
+        if p.exists():
+            raise click.UsageError(f"{p} exists; refusing to overwrite")
+    key = Ed25519PrivateKey.generate()
+    fd = os.open(private_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(_json.dumps(private_jwk(key, kid), indent=2) + "\n")
+    public_path.write_text(
+        _json.dumps({"keys": [public_jwk(key, kid)]}, indent=2) + "\n", encoding="utf-8"
+    )
+    click.echo(f"wrote {private_path} (private, keep it secret) and {public_path} (public)")

@@ -1,0 +1,34 @@
+name: 45-refusal-escalation-unresolved
+description: |
+  The policy escalates and nobody resolves it before the receipt is
+  issued. policy.decision stays escalate (it records what the policy
+  returned) and refusal.verdict=require-approval says why nothing ran.
+setup:
+  receipt_version: agentboundary/v0.2-alpha
+  now: "2026-06-15T14:23:00Z"
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: escalate
+      capabilities: [spring.service.mutation]
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+expect:
+  decision: escalate
+  conformance_level: 4
+  receipt_must_validate: true
+  assertions:
+    - { field: policy.decision, equals: escalate }
+    - { field: execution.status, equals: blocked }
+    - { field: refusal.verdict, equals: require-approval }

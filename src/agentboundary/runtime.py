@@ -8,18 +8,23 @@ out of the box. Third-party implementations plug in as additional
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
+from agentboundary.conformance import _parse_rfc3339
 from agentboundary.hashing import (
     compute_arguments_hash,
     compute_receipt_hash,
 )
 
 Decision = Literal["allow", "deny", "require-approval", "escalate"]
+
+V01: Final = "agentboundary/v0.1"
+V02_ALPHA: Final = "agentboundary/v0.2-alpha"
 
 # Returned by ``_match_policy`` when no policy in setup covers the requested
 # capability. Fail-closed: the action is denied and the receipt records that
@@ -56,11 +61,22 @@ class Implementation(ABC):
 
 
 class ReferenceImplementation(Implementation):
-    """In-memory reference implementation used by the W3 conformance suite."""
+    """In-memory reference implementation used by the conformance suite.
+
+    By default it emits v0.1 receipts and does not enforce the approval
+    window or approver list itself; scenarios 11 and 12 rely on that to hand
+    the verifier a receipt with a bad approval. With
+    ``setup.receipt_version = "agentboundary/v0.2-alpha"`` it emits v0.2-alpha
+    receipts, refuses an action whose approval is stale or from an approver
+    the policy does not list, and records every refusal in a ``refusal``
+    block (spec v0.2-alpha section 2.3).
+    """
 
     def attempt(self, action: dict[str, Any], *, setup: dict[str, Any]) -> RuntimeOutcome:
         arguments = action.get("arguments", {})
         capability = action.get("tool", {}).get("capability", "")
+        emit_v02 = setup.get("receipt_version") == V02_ALPHA
+        stamp = setup.get("now") or _now_rfc3339()
 
         policy = _match_policy(setup.get("policies", []), capability)
         if policy is None:
@@ -71,25 +87,40 @@ class ReferenceImplementation(Implementation):
         approval_for_cap = next((a for a in approvals if a.get("capability") == capability), None)
 
         rule = policy["rule"]
+        refusal: dict[str, str] | None = None
         if rule == "allow":
             decision: Decision = "allow"
             executed = True
         elif rule == "deny":
             decision = "deny"
             executed = False
+            reason = "no-matching-policy" if policy is IMPLICIT_DENY_POLICY else "policy-deny"
+            refusal = {"verdict": "deny", "reason_code": reason}
         elif rule == "escalate":
             decision = "escalate"
             executed = False
+            refusal = {"verdict": "require-approval", "reason_code": "escalation-unresolved"}
         elif rule == "require-approval":
-            if approval_for_cap is not None:
-                decision = "allow"
-                executed = True
-            else:
+            problem = (
+                _approval_problem(policy, approval_for_cap, stamp)
+                if emit_v02 and approval_for_cap is not None
+                else None
+            )
+            if approval_for_cap is None:
                 decision = "require-approval"
                 executed = False
+                refusal = {"verdict": "require-approval", "reason_code": "approval-missing"}
+            elif problem is not None:
+                decision = "deny"
+                executed = False
+                refusal = problem
+            else:
+                decision = "allow"
+                executed = True
         else:
             decision = "deny"
             executed = False
+            refusal = {"verdict": "deny", "reason_code": "unknown-rule"}
 
         receipt = _build_receipt(
             action=action,
@@ -97,14 +128,84 @@ class ReferenceImplementation(Implementation):
             policy=policy,
             policy_decision=rule,
             executed=executed,
-            approval=approval_for_cap,
+            approval=_recordable(approval_for_cap),
             seed_receipt_id=setup.get("seed_receipt_id"),
+            now=stamp,
+            version=V02_ALPHA if emit_v02 else V01,
+            refusal=refusal if emit_v02 else None,
         )
 
         for op in action.get("inject", []):
             receipt = _apply_inject(receipt, op)
 
         return RuntimeOutcome(decision=decision, receipt=receipt, arguments=arguments)
+
+
+def _recordable(approval: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return ``approval`` if the receipt can record it faithfully, else None.
+
+    A receipt's approval block needs an approver with a non-empty string id
+    and a string timestamp. An approval without them never authorizes
+    anything (the approver check refuses it) and is left out of the receipt
+    rather than recorded in a shape the schema rejects.
+    """
+    if not isinstance(approval, dict):
+        return None
+    approver = approval.get("approver")
+    ok = (
+        isinstance(approver, dict)
+        and isinstance(approver.get("id"), str)
+        and bool(approver.get("id"))
+        and isinstance(approval.get("approved_at"), str)
+    )
+    return approval if ok else None
+
+
+# How far an approval may postdate the runtime's clock before it is refused.
+# A small allowance absorbs skew between the approval system and the runtime;
+# beyond it, a forward-dated approval would stretch the window without limit.
+APPROVAL_CLOCK_SKEW_SECONDS: Final = 60
+
+
+def _approval_problem(
+    policy: dict[str, Any], approval: dict[str, Any], now: str
+) -> dict[str, str] | None:
+    """Return a refusal if ``approval`` does not authorize the action under ``policy``.
+
+    Checks the approver list first (who), then the approval window (when).
+    Every guard is written positively, so a value it cannot evaluate (a
+    missing or non-string id, an unparseable timestamp, a NaN or non-numeric
+    window) refuses rather than passes.
+    """
+    approvers = policy.get("approvers")
+    if approvers is not None:
+        allowed = {
+            a.get("id")
+            for a in (approvers if isinstance(approvers, list) else [])
+            if isinstance(a, dict) and isinstance(a.get("id"), str) and a.get("id")
+        }
+        approver = approval.get("approver")
+        approver_id = approver.get("id") if isinstance(approver, dict) else None
+        if not (isinstance(approver_id, str) and approver_id in allowed):
+            return {"verdict": "deny", "reason_code": "approver-not-authorized"}
+
+    max_age = policy.get("approval_max_age_seconds")
+    if max_age is not None:
+        usable = (type(max_age) is int and max_age >= 0) or (
+            type(max_age) is float and math.isfinite(max_age) and max_age >= 0
+        )
+        if not usable:
+            return {"verdict": "deny", "reason_code": "approval-window-invalid"}
+        approved_at = _parse_rfc3339(approval.get("approved_at"))
+        current = _parse_rfc3339(now)
+        if approved_at is None or current is None:
+            return {"verdict": "deny", "reason_code": "approval-time-unreadable"}
+        age = (current - approved_at).total_seconds()
+        if not age >= -APPROVAL_CLOCK_SKEW_SECONDS:
+            return {"verdict": "deny", "reason_code": "approval-postdates-action"}
+        if not age <= max_age:
+            return {"verdict": "expired", "reason_code": "approval-window-elapsed"}
+    return None
 
 
 def _match_policy(policies: list[dict[str, Any]], capability: str) -> dict[str, Any] | None:
@@ -128,6 +229,9 @@ def _build_receipt(
     executed: bool,
     approval: dict[str, Any] | None,
     seed_receipt_id: str | None = None,
+    now: str | None = None,
+    version: str = "agentboundary/v0.1",
+    refusal: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Assemble an Action Receipt for the given action + policy outcome.
 
@@ -138,11 +242,16 @@ def _build_receipt(
     approval block — in that case ``policy_decision="require-approval"``
     while ``RuntimeOutcome.decision="allow"``. Scenarios depend on the
     bifurcation; do not flatten it.
+
+    ``now`` pins the clock (an RFC 3339 string) for ``issued_at`` and
+    ``execution.completed_at``. Scenarios that test a time window set it so
+    the outcome does not depend on when the suite runs.
     """
+    stamp = now or _now_rfc3339()
     receipt: dict[str, Any] = {
-        "version": "agentboundary/v0.1",
+        "version": version,
         "receipt_id": seed_receipt_id or str(uuid.uuid4()),
-        "issued_at": _now_rfc3339(),
+        "issued_at": stamp,
         "actor": action["actor"],
         "agent": action["agent"],
         "tool": action["tool"],
@@ -181,7 +290,7 @@ def _build_receipt(
     if executed:
         receipt["execution"] = {
             "status": "success",
-            "completed_at": _now_rfc3339(),
+            "completed_at": stamp,
             "result_ref": f"ref:{receipt['receipt_id'][:8]}",
         }
     else:
@@ -189,8 +298,10 @@ def _build_receipt(
         # execution block with status=blocked so receipts have a uniform shape.
         receipt["execution"] = {
             "status": "blocked",
-            "completed_at": _now_rfc3339(),
+            "completed_at": stamp,
         }
+    if refusal is not None:
+        receipt["refusal"] = dict(refusal)
     receipt["receipt_hash"] = compute_receipt_hash(receipt)
     return receipt
 

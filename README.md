@@ -12,7 +12,7 @@ uvx agentboundary run scenarios/
 
 40 scenarios, 60 seconds, no signup, no Docker.
 
-**v0.1** is the stable spec. **v0.2-alpha** (draft) adds three optional fields — `provenance`, `completeness_score`, `prior_receipt` — for self-honest emission reporting and singly-linked chain-of-custody. See [`docs/spec/v0.2-alpha.md`](docs/spec/v0.2-alpha.md).
+**v0.1** is the stable spec. **v0.2-alpha** (draft) adds optional fields: `provenance` and `completeness_score` for self-honest emission reporting, `prior_receipt` for a singly-linked chain, and `refusal`, so a refused action leaves a receipt that says what was not allowed. It also defines an optional signed envelope (COSE_Sign1, Ed25519) and an offline verifier. See [`docs/spec/v0.2-alpha.md`](docs/spec/v0.2-alpha.md).
 
 ## The problem AgentBoundary solves
 
@@ -42,6 +42,23 @@ The conformance suite in this repo runs 40 deterministic scenarios — *every te
 
 This is `docs/receipts/github-merge.json` verbatim. The `receipt_hash` is the canonical SHA-256 of the body with `receipt_hash` excluded — recompute it yourself and the value matches.
 
+## Verify a receipt yourself
+
+A receipt is only useful as evidence if someone who does not trust the emitter can check it. `agentboundary verify` runs on your machine, makes no network calls, and needs nothing from JamJet:
+
+```bash
+agentboundary verify docs/receipts/github-merge.json
+
+# signed receipts and chains
+agentboundary keygen --kid emitter-1 --private emitter-1.jwk --public keys.jwks
+agentboundary sign receipt.json --key emitter-1.jwk -o receipt.cose
+agentboundary verify --keys keys.jwks --require-signature r1.cose r2.cose r3.cose
+```
+
+It checks strict JSON parsing, the envelope and its Ed25519 signature against the keys you supply, that the signed payload is exactly the canonical (RFC 8785) receipt, the schema, `receipt_hash`, and, for several receipts, that they form one unbroken chain from its first receipt. Every check is reported as pass, fail, or not checked with the reason, and the report always lists what the verifier cannot establish (for example, a truncated chain tail, or whether the record is true). `verify`, `sign` and `keygen` need agentboundary 0.2.0-alpha.2 or later (`pip install --pre agentboundary`).
+
+The envelope can carry the protected header shape of an RFC 9943 (SCITT) Signed Statement. AgentBoundary receipts are aligned with the [draft-noa-scitt-ai-agent-receipt-01](https://datatracker.ietf.org/doc/draft-noa-scitt-ai-agent-receipt/) field set where a field has a counterpart; they are not receipts in that draft's format. [`docs/spec/scitt-alignment.md`](docs/spec/scitt-alignment.md) maps every field and says what matches, what differs, and what each side lacks.
+
 ## What's here today
 
 - [`docs/spec/v0.1.md`](docs/spec/v0.1.md) — the v0.1 specification (definitions, lifecycle, receipt requirements, conformance levels, versioning)
@@ -51,9 +68,11 @@ This is `docs/receipts/github-merge.json` verbatim. The `receipt_hash` is the ca
 - [`docs/schemas/action-receipt-v0.2-alpha.json`](docs/schemas/action-receipt-v0.2-alpha.json) — draft v0.2-alpha schema with optional `provenance` + `completeness_score` + `prior_receipt` fields
 - [`docs/receipts/`](docs/receipts/README.md) — three worked example receipts (GitHub merge, Spring service mutation, Stripe refund); each one's `receipt_hash` verifies under the spec
 - [`scenarios/`](scenarios/) — 40 deterministic conformance scenarios driven by `agentboundary run` (v0.1 spec freeze: lifecycle + adversarial + positive boundaries + v0.2-alpha extensions + canonical-JSON + environment + honest-failure paths)
+- [`scenarios-v0.2-alpha/`](scenarios-v0.2-alpha/): 14 v0.2-alpha draft scenarios covering refusal receipts, signed envelopes, and the Signed Statement shape (`agentboundary run scenarios-v0.2-alpha/`)
+- [`docs/spec/scitt-alignment.md`](docs/spec/scitt-alignment.md): field-by-field comparison with draft-noa-scitt-ai-agent-receipt-01 and the SCITT RFCs
 - [`docs/spec/v0.2-alpha.md`](docs/spec/v0.2-alpha.md) — draft v0.2 delta: optional `provenance` + `completeness_score` + `prior_receipt` fields for self-honest emission reporting and singly-linked chain-of-custody
 - [`adapters/`](adapters/) — translation layers from existing agent-governance products to AgentBoundary v0.2-alpha receipts (Microsoft AGT, Anthropic permission_policy, LangSmith Gateway, Cloudflare HITL); each adapter ships its own `mapping.md`, `results.md`, and smoke tests
-- [`src/agentboundary/`](src/agentboundary/) — Python reference implementation (validator, hashing, runtime, CLI)
+- [`src/agentboundary/`](src/agentboundary/) — Python reference implementation (validator, hashing, runtime, COSE envelope, offline verifier, CLI)
 - [`npm/`](npm/) — thin Node wrapper that dispatches to `uvx`, `pipx`, or `python3 -m agentboundary`
 
 ## Comparison with other agent-governance products
@@ -75,7 +94,7 @@ pip install hatch
 hatch test
 ```
 
-155 fast tests cover the schema loader, validator, hashing, conformance checks (Levels 1-4 including v0.2-alpha completeness + chain integrity), runtime, scenarios loader, and CLI. 8 additional slow tests verify the published wheel behaves correctly under a clean install.
+The fast tests cover the schema loader, validator, hashing, conformance checks (Levels 1-4 including v0.2-alpha completeness, chain integrity and refusals), the COSE envelope, the offline verifier, runtime, scenarios, and CLI. Slow tests (`hatch test -m slow`) verify the built wheel under a clean install.
 
 ## License
 

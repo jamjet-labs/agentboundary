@@ -37,6 +37,17 @@ class ConformanceCheck:
 
 _LEVEL_2_DECISIONS = {"allow", "deny", "require-approval", "escalate"}
 
+# v0.2-alpha refusal verdicts and the policy decisions each one is consistent
+# with. A refusal says why the action did not run; it must not contradict
+# the policy output the receipt also records. "allow" appears nowhere: a
+# policy that allowed the action has nothing to refuse (an allowed action
+# that then failed to run is execution.status=blocked WITHOUT a refusal).
+_REFUSAL_CONSISTENT_DECISIONS: dict[str, frozenset[str]] = {
+    "deny": frozenset({"deny", "require-approval", "escalate"}),
+    "require-approval": frozenset({"require-approval", "escalate"}),
+    "expired": frozenset({"require-approval", "escalate"}),
+}
+
 _L3_HASH_FIELDS = frozenset({"arguments_hash", "receipt_hash"})
 
 
@@ -208,7 +219,14 @@ def check_conformance(
                     field="policy.decision",
                 )
             )
-        if decision == "require-approval" and not receipt.get("approval"):
+        # Spec v0.1 §2.6/§4.10: approval is required when the action
+        # PROCEEDED. A blocked require-approval receipt without an approval
+        # block is the honest record of an approval that never came. The
+        # v0.1 schema is stricter than that prose and still rejects such a
+        # receipt before this point; the v0.2-alpha schema matches the prose.
+        status = (receipt.get("execution") or {}).get("status")
+        proceeded = status in ("success", "failure")
+        if decision == "require-approval" and proceeded and not receipt.get("approval"):
             results.append(
                 ConformanceCheck(
                     level=2,
@@ -218,6 +236,8 @@ def check_conformance(
                     field="approval",
                 )
             )
+
+        results.extend(_refusal_checks(receipt))
 
     # 4. Level 3 — Portable Proof
     if level >= 3:
@@ -303,6 +323,55 @@ def check_conformance(
     return sorted(results)
 
 
+def _refusal_checks(receipt: dict[str, Any]) -> list[ConformanceCheck]:
+    """Level 2 checks for the v0.2-alpha ``refusal`` block.
+
+    A refusal records that the action did NOT run. Two lies are detectable
+    from the receipt alone: a refusal on an action that reports it ran, and
+    a refusal verdict that contradicts the recorded policy decision.
+    """
+    refusal = receipt.get("refusal")
+    if not isinstance(refusal, dict):
+        return []
+    out: list[ConformanceCheck] = []
+    status = (receipt.get("execution") or {}).get("status")
+    if status != "blocked":
+        out.append(
+            ConformanceCheck(
+                level=2,
+                code="LEVEL_2_REFUSAL_EXECUTED",
+                severity="fail",
+                message=(
+                    f"refusal is present but execution.status={status!r}; "
+                    "a refused action must record execution.status=blocked"
+                ),
+                field="refusal",
+            )
+        )
+    verdict = refusal.get("verdict")
+    decision = (receipt.get("policy") or {}).get("decision")
+    consistent = _REFUSAL_CONSISTENT_DECISIONS.get(verdict) if isinstance(verdict, str) else None
+    if consistent is None or decision not in consistent:
+        out.append(
+            ConformanceCheck(
+                level=2,
+                code="LEVEL_2_REFUSAL_DECISION_MISMATCH",
+                severity="fail",
+                message=(
+                    f"refusal.verdict={verdict!r} is inconsistent with policy.decision={decision!r}"
+                ),
+                field="refusal.verdict",
+            )
+        )
+    return out
+
+
+def _is_recorded_refusal(receipt: dict[str, Any]) -> bool:
+    """True iff the receipt records a refusal AND reports the action blocked."""
+    status = (receipt.get("execution") or {}).get("status")
+    return isinstance(receipt.get("refusal"), dict) and status == "blocked"
+
+
 def _level_4_checks(
     receipt: dict[str, Any],
     *,
@@ -350,6 +419,23 @@ def _level_4_checks(
                 message=(
                     "policy_full not supplied; "
                     "LEVEL_4_STALE_APPROVAL and LEVEL_4_UNAUTHORIZED_APPROVER skipped"
+                ),
+            )
+        )
+    elif approval is not None and _is_recorded_refusal(receipt):
+        # The stale/unauthorized checks catch an action that RAN on a bad
+        # approval. This receipt records that the action was refused, so the
+        # bad approval it carries is the evidence of the refusal, not a
+        # breach. Reported as info so a reader can see the checks did not run.
+        out.append(
+            ConformanceCheck(
+                level=4,
+                code="LEVEL_4_APPROVAL_CHECKS_NOT_APPLICABLE",
+                severity="info",
+                message=(
+                    "receipt records a refusal with execution.status=blocked; "
+                    "LEVEL_4_STALE_APPROVAL and LEVEL_4_UNAUTHORIZED_APPROVER "
+                    "apply only to actions that ran"
                 ),
             )
         )

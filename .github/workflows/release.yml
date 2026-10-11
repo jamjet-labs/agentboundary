@@ -67,10 +67,16 @@ jobs:
             echo "::error::Wheel must bundle $EXPECTED scenarios (matching scenarios/ in repo), found $SCENARIO_COUNT"
             exit 1
           fi
+          EXPECTED_DRAFT=$(ls scenarios-v0.2-alpha/*.yaml | wc -l | tr -d ' ')
+          DRAFT_COUNT=$(unzip -l "$WHEEL" | grep -c "_data/scenarios-v0.2-alpha/.*\.yaml$" || true)
+          if [ "$DRAFT_COUNT" -ne "$EXPECTED_DRAFT" ]; then
+            echo "::error::Wheel must bundle $EXPECTED_DRAFT v0.2-alpha scenarios, found $DRAFT_COUNT"
+            exit 1
+          fi
           unzip -l "$WHEEL" | grep -q "_data/action-receipt-v0.1.json" || (echo "::error::Wheel missing v0.1 schema"; exit 1)
           unzip -l "$WHEEL" | grep -q "_data/action-receipt-v0.2-alpha.json" || (echo "::error::Wheel missing v0.2-alpha schema"; exit 1)
           unzip -l "$WHEEL" | grep -q "scenarios/_meta-schema.json" || (echo "::error::Wheel missing meta-schema"; exit 1)
-          echo "Wheel content verified: $SCENARIO_COUNT scenarios + v0.1 + v0.2-alpha schemas + meta-schema."
+          echo "Wheel content verified: $SCENARIO_COUNT + $DRAFT_COUNT scenarios + v0.1 + v0.2-alpha schemas + meta-schema."
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

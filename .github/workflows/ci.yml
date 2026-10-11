@@ -39,7 +39,7 @@ jobs:
       - name: Ruff (style + format check)
         run: |
           hatch run lint:style
-          hatch run lint:fmt --check
+          hatch run lint:fmt --check src tests
       - name: Mypy (strict types)
         run: hatch run lint:type
 
@@ -71,6 +71,7 @@ jobs:
                       'agentboundary/_data/examples/stripe-refund.json',
                       'agentboundary/_data/scenarios/01-merge-allow.yaml',
                       'agentboundary/_data/scenarios/10-claim-level-3-without-hash.yaml',
+                      'agentboundary/_data/scenarios-v0.2-alpha/41-refusal-policy-deny.yaml',
                       'agentboundary/scenarios/_meta-schema.json']
           missing = [r for r in required if r not in names]
           if missing:

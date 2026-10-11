@@ -88,3 +88,14 @@ class TestRunDirectory:
         for n in range(1, total + 1):
             assert f"{n:02d}-" in result.output
         assert f"{total} passed · 0 failed" in result.output
+
+    def test_run_v02_alpha_scenarios(self, runner: CliRunner) -> None:
+        from pathlib import Path
+
+        result = runner.invoke(main, ["run", "scenarios-v0.2-alpha/"])
+        assert result.exit_code == 0, result.output
+        files = sorted(Path("scenarios-v0.2-alpha").glob("[0-9]*.yaml"))
+        assert files
+        for f in files:
+            assert f.stem in result.output
+        assert f"{len(files)} passed · 0 failed" in result.output

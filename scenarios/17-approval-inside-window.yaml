@@ -11,7 +11,7 @@ setup:
       capabilities: [spring.service.mutation]
       approvers:
         - { id: "user:eng-lead@acme", type: human }
-      approval_max_age_seconds: 31536000
+      approval_max_age_seconds: 3153600000
   approvals:
     - capability: spring.service.mutation
       approver: { type: human, id: "user:eng-lead@acme" }

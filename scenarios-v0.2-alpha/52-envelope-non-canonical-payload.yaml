@@ -1,0 +1,36 @@
+name: 52-envelope-non-canonical-payload
+description: |
+  The envelope is validly signed, but its payload is pretty-printed JSON
+  rather than the RFC 8785 (JCS) form of the receipt. Two encodings of one
+  receipt would mean two signatures over "the same" record, so the
+  verifier requires JCS(parse(payload)) == payload.
+setup:
+  envelope:
+    kid: scenario-test-key
+    # TEST KEY ONLY: a fixed, public seed so the suite is deterministic.
+    seed_hex: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+  envelope_inject:
+    - { op: non_canonical_payload }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["PAYLOAD_NOT_CANONICAL"]

@@ -219,3 +219,24 @@ class TestInjectHooks:
         }
         outcome = ReferenceImplementation().attempt(action, setup=setup)
         assert "arguments_hash" not in outcome.receipt
+
+
+class TestDeterministicClock:
+    """``setup.now`` pins the runtime clock so time-window scenarios do not
+    drift with the wall clock (scenario 38 went red once real time passed
+    its approval window)."""
+
+    def test_setup_now_pins_issued_and_completed(
+        self, allow_setup: dict, basic_action: dict
+    ) -> None:
+        setup = {**allow_setup, "now": "2026-06-15T14:23:00Z"}
+        receipt = ReferenceImplementation().attempt(basic_action, setup=setup).receipt
+        assert receipt is not None
+        assert receipt["issued_at"] == "2026-06-15T14:23:00Z"
+        assert receipt["execution"]["completed_at"] == "2026-06-15T14:23:00Z"
+        assert receipt["receipt_hash"] == compute_receipt_hash(receipt)
+
+    def test_without_now_uses_wall_clock(self, allow_setup: dict, basic_action: dict) -> None:
+        receipt = ReferenceImplementation().attempt(basic_action, setup=allow_setup).receipt
+        assert receipt is not None
+        assert receipt["issued_at"] != "2026-06-15T14:23:00Z"

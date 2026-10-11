@@ -57,6 +57,38 @@
           "items": { "type": "string", "format": "uuid" }
         },
         "seed_receipt_id": { "type": "string", "format": "uuid" },
+        "receipt_version": {
+          "type": "string",
+          "enum": ["agentboundary/v0.1", "agentboundary/v0.2-alpha"],
+          "description": "Receipt version the reference implementation emits. agentboundary/v0.2-alpha also turns on runtime enforcement of the approver list and approval window, and records refusals."
+        },
+        "envelope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kid", "seed_hex"],
+          "description": "Sign the emitted receipt in a COSE_Sign1 envelope and verify it offline. seed_hex is a fixed TEST key, never a real one.",
+          "properties": {
+            "kid": { "type": "string", "minLength": 1 },
+            "seed_hex": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "issuer": { "type": "string", "minLength": 1 },
+            "subject": { "type": "string", "minLength": 1 },
+            "keyring_kid": {
+              "type": "string",
+              "minLength": 1,
+              "description": "kid the verifier's keyring lists the key under (default: kid)."
+            },
+            "as_signed_statement": { "type": "boolean" }
+          },
+          "dependentRequired": {
+            "issuer": ["subject"],
+            "subject": ["issuer"]
+          }
+        },
+        "now": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Pins the reference implementation's clock (issued_at, execution.completed_at) so time-window scenarios do not depend on when the suite runs."
+        },
         "minimum_completeness": {
           "type": "number",
           "minimum": 0.0,
@@ -99,6 +131,33 @@
         "tool": { "type": "object" },
         "target": { "type": "object" },
         "arguments": { "type": "object" },
+        "envelope_inject": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["op"],
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": ["resign_with_alg", "non_canonical_payload", "replace_in_payload"]
+              },
+              "alg": { "type": "integer" },
+              "find": { "type": "string", "minLength": 1 },
+              "replace": { "type": "string", "minLength": 1 }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "op": { "const": "resign_with_alg" } } },
+                "then": { "required": ["alg"] }
+              },
+              {
+                "if": { "properties": { "op": { "const": "replace_in_payload" } } },
+                "then": { "required": ["find", "replace"] }
+              }
+            ]
+          }
+        },
         "inject": {
           "type": "array",
           "items": {

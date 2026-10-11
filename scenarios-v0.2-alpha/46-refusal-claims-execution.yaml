@@ -1,0 +1,33 @@
+name: 46-refusal-claims-execution
+description: |
+  A receipt that records a refusal and also claims the action succeeded.
+  Either the runtime ran a refused action or the receipt was edited and
+  rehashed. LEVEL_2_REFUSAL_EXECUTED fires from the receipt alone.
+setup:
+  receipt_version: agentboundary/v0.2-alpha
+  now: "2026-06-15T14:23:00Z"
+  policies:
+    - name: agentboundary.repo.merges.locked
+      version: "1"
+      rule: deny
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+  inject:
+    - { op: mutate_field, path: execution.status, value: success, recompute_hash: true }
+expect:
+  decision: deny
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_2_REFUSAL_EXECUTED"]

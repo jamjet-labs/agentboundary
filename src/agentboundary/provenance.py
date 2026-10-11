@@ -73,6 +73,8 @@ _CONDITIONAL_PATHS: Final[tuple[str, ...]] = (
     "execution.result_ref",
     "prior_receipt.receipt_id",
     "prior_receipt.receipt_hash",
+    "refusal.verdict",
+    "refusal.reason_code",
 )
 
 ALL_PROVENANCE_PATHS: Final[tuple[str, ...]] = _REQUIRED_PATHS + _CONDITIONAL_PATHS

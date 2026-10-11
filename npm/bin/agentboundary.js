@@ -11,7 +11,17 @@
 const { spawnSync } = require('node:child_process');
 const { existsSync } = require('node:fs');
 
-const PINNED_VERSION = require('../package.json').version;
+// The npm package version is the single declaration. It must equal the
+// pyproject.toml version textually (npm/test/pin.test.js enforces this), and
+// the Python pin is derived from it by PEP 440 normalization.
+function toPythonVersion(npmVersion) {
+  return npmVersion
+    .replace(/-alpha\.?(\d+)$/, 'a$1')
+    .replace(/-beta\.?(\d+)$/, 'b$1')
+    .replace(/-rc\.?(\d+)$/, 'rc$1');
+}
+
+const PINNED_VERSION = toPythonVersion(require('../package.json').version);
 
 function hasOnPath(cmd) {
   const probe = process.platform === 'win32'
@@ -79,4 +89,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { dispatch, hasOnPath };
+module.exports = { dispatch, hasOnPath, toPythonVersion, PINNED_VERSION };

@@ -1,7 +1,7 @@
 """Smoke tests for the AGT adapter — confirm it produces schema-valid receipts.
 
-These tests do not run as part of the main agentboundary suite; they live
-alongside the adapter and can be invoked with::
+These tests do not run as part of ``hatch test``; CI runs them in the
+``adapters`` job. They live alongside the adapter and can be invoked with::
 
     pytest adapters/microsoft-agt/test_adapter.py
 """

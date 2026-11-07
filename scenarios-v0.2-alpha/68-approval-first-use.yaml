@@ -1,0 +1,43 @@
+name: 68-approval-first-use
+description: |
+  Control for scenario 67. The verifier has seen this approver's earlier
+  approval, from a different time, used for another action. This approval
+  is new, so it passes. The replay check must compare the whole approval,
+  not just who gave it.
+setup:
+  now: "2026-06-15T14:23:00Z"
+  seed_receipt_id: "0192c8d0-1f2a-7c3e-bf2a-0000000000a2"
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+      approval_max_age_seconds: 600
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2026-06-15T14:20:00Z"
+  prior_approvals:
+    - receipt_id: "0192c8d0-1f2a-7c3e-bf2a-0000000000a1"
+      approval:
+        approver: { id: "user:eng-lead@acme" }
+        approved_at: "2026-06-15T13:05:00Z"
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true

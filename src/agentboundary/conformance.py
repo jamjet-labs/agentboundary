@@ -2,19 +2,24 @@
 
 Each level builds on the previous. Level 4 (Tamper-Evident) examines the
 receipt against verifier-supplied context: the matching policy definition
-(for stale-approval and unauthorized-approver checks), and the set of
-receipt_ids already observed (for replay detection). When that context is
-missing, Level 4 emits info-severity ``LEVEL_4_SKIPPED_*`` markers so
-callers can tell "passed Level 4" from "Level 4 was not checked."
+(for stale-approval and unauthorized-approver checks), the set of
+receipt_ids already observed (for replay detection), the arguments the
+action actually executed with (for argument mutation), and the approvals
+already used (for approval replay). When that context is missing, Level 4
+emits info-severity ``LEVEL_4_SKIPPED_*`` markers so callers can tell
+"passed Level 4" from "Level 4 was not checked."
 """
 
 from __future__ import annotations
 
+import hashlib
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Literal, cast
+from typing import Any, Final, Literal, cast
 
-from agentboundary.hashing import compute_arguments_hash, compute_receipt_hash
+from agentboundary.hashing import canonical_json, compute_arguments_hash, compute_receipt_hash
 from agentboundary.provenance import compute_completeness_score
 from agentboundary.validator import iter_schema_errors, validate_receipt
 
@@ -50,38 +55,43 @@ _REFUSAL_CONSISTENT_DECISIONS: dict[str, frozenset[str]] = {
 
 _L3_HASH_FIELDS = frozenset({"arguments_hash", "receipt_hash"})
 
+# How far an approval may postdate the receipt's issued_at before it is
+# treated as forward-dated. The reference runtime refuses on the same bound.
+APPROVAL_CLOCK_SKEW_SECONDS: Final = 60
 
-# TODO(W3-followup): remove when the v0.2 schema makes arguments_hash and
-# receipt_hash optional at the top level. See the spec §5.1 / §5.3 ambiguity.
-def _schema_failure_is_only_missing_hashes(receipt: dict[str, Any]) -> bool:
-    """True iff every schema error is a missing-arguments_hash/receipt_hash error.
 
-    Uses ``iter_schema_errors`` so the decision is made structurally
-    (``err.validator == "required"`` plus the missing property name) rather
-    than by string-matching jsonschema's human-readable wording. This keeps
-    the workaround working across jsonschema version bumps that may reword
-    error messages.
+def approval_fingerprint(approval: Mapping[str, Any]) -> str:
+    """SHA-256 hex of the RFC 8785 serialization of an ``approval`` block.
 
-    Used to decide whether we can still emit the L3 hash-required checks
-    after a schema short-circuit. If the receipt is broadly malformed (e.g.
-    missing the actor block), we don't surface L3 codes because the caller
-    has bigger problems to fix first.
+    A v0.1 approval carries no token identifier, so the approval block
+    itself is the token: the same approver, timestamp and context. Two
+    receipts carrying the same fingerprint carry the same approval.
     """
-    errors = iter_schema_errors(receipt)
-    if not errors:
-        return False
-    for err in errors:
-        if err.validator != "required":
-            return False
-        # A required-property error at depth N reports a SINGLE missing
-        # property in its message; the absolute path is the parent. We only
-        # care about top-level (root) misses for the L3 hash workaround.
-        if list(err.absolute_path):
-            return False
+    return hashlib.sha256(canonical_json(dict(approval)).encode("utf-8")).hexdigest()
+
+
+def _schema_error_is_explained(err: Any) -> bool:
+    """True if the Level 2 or Level 3 structural checks report this error by name.
+
+    The schema enforces some Level 2 and Level 3 rules itself: a missing
+    ``approval`` when one is required, a ``policy.decision`` outside the
+    enum, and missing hash fields. When those are the only schema errors,
+    the level codes are reported next to ``SCHEMA_INVALID`` so a caller
+    learns which rule was broken. Decided structurally (validator kind,
+    path, property name), never by matching jsonschema's wording alone.
+    """
+    path = list(err.absolute_path)
+    if err.validator == "required" and not path:
         missing = _extract_missing_property(err)
-        if missing is None or missing not in _L3_HASH_FIELDS:
-            return False
-    return True
+        return missing in _L3_HASH_FIELDS or missing == "approval"
+    return err.validator == "enum" and path == ["policy", "decision"]
+
+
+def _schema_failure_is_explained(receipt: dict[str, Any]) -> bool:
+    """True iff the receipt fails the schema and every error is one the
+    structural checks name (see ``_schema_error_is_explained``)."""
+    errors = iter_schema_errors(receipt)
+    return bool(errors) and all(_schema_error_is_explained(e) for e in errors)
 
 
 def _extract_missing_property(err: Any) -> str | None:
@@ -117,6 +127,8 @@ def check_conformance(
     policy_store: set[tuple[str, str]] | None = None,
     minimum_completeness: float | None = None,
     prior_receipt_hashes: dict[str, str] | None = None,
+    executed_arguments: dict[str, Any] | None = None,
+    prior_approvals: Mapping[str, str] | None = None,
 ) -> list[ConformanceCheck]:
     """Run all conformance checks up to ``level`` against ``receipt``.
 
@@ -151,6 +163,19 @@ def check_conformance(
     ``LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES``. An explicitly empty dict
     is treated as "verifier has no chain to compare against" and the
     receipt's claimed prior_receipt link is rejected as a broken chain.
+
+    ``executed_arguments`` is the arguments object the action actually ran
+    with, from a record the verifier trusts (the target system's log, for
+    example). Spec v0.1 section 5.4 requires rejecting a receipt whose
+    action ran with arguments other than the ones policy evaluated
+    (``LEVEL_4_ARGUMENT_MUTATION``). Absence emits
+    ``LEVEL_4_SKIPPED_NO_EXECUTED_ARGUMENTS`` for an action that ran.
+
+    ``prior_approvals`` maps ``approval_fingerprint(approval)`` to the
+    receipt_id of the action that approval was already used for. Spec v0.1
+    section 5.4 requires rejecting an approval reused for a different action
+    (``LEVEL_4_APPROVAL_REPLAY``). Absence emits
+    ``LEVEL_4_SKIPPED_NO_PRIOR_APPROVALS`` for a receipt carrying an approval.
     """
     if level < 1 or level > 4:
         raise ValueError(f"level must be in 1..4, got {level}")
@@ -168,36 +193,13 @@ def check_conformance(
                 message=f"Receipt fails schema validation: {schema_errors[0]}",
             )
         )
-        # When L3 is requested and the schema failed *only* because the L3
-        # hash fields are missing, also surface the L3-specific codes so
-        # callers can distinguish "schema is broken in unrelated ways" from
-        # "you forgot the L3 hashes". When the receipt is broadly malformed,
-        # short-circuit entirely and let the caller fix the structural issues
-        # first.
-        # TODO(W3-followup): remove when the v0.2 schema makes arguments_hash
-        # and receipt_hash optional at the top level. See the spec §5.1 /
-        # §5.3 ambiguity.
-        if level >= 3 and _schema_failure_is_only_missing_hashes(receipt):
-            if "arguments_hash" not in receipt:
-                results.append(
-                    ConformanceCheck(
-                        level=3,
-                        code="LEVEL_3_ARGUMENTS_HASH_REQUIRED",
-                        severity="fail",
-                        message="Level 3 receipts must include arguments_hash",
-                        field="arguments_hash",
-                    )
-                )
-            if "receipt_hash" not in receipt:
-                results.append(
-                    ConformanceCheck(
-                        level=3,
-                        code="LEVEL_3_RECEIPT_HASH_REQUIRED",
-                        severity="fail",
-                        message="Level 3 receipts must include receipt_hash",
-                        field="receipt_hash",
-                    )
-                )
+        # When the schema failed only on rules that Level 2 and Level 3
+        # also state (see _schema_error_is_explained), report those levels'
+        # codes too, so a caller can tell "you left out the approval" from
+        # "the receipt is broken in unrelated ways". A broadly malformed
+        # receipt short-circuits here with SCHEMA_INVALID alone.
+        if _schema_failure_is_explained(receipt):
+            results.extend(_structural_checks(receipt, level))
         return sorted(results)
 
     # 2. Level 1 — Logged
@@ -205,63 +207,16 @@ def check_conformance(
     # invariants in the spec are effectively "the schema's required set".
     # We add no additional fail-checks at L1 beyond schema.
 
-    # 3. Level 2 — Policy-Bound
+    # 3. Level 2 — Policy-Bound, and the Level 3 hash-presence rules. Both
+    # schemas enforce these today, so on a schema-valid receipt they find
+    # nothing; they run here too so a laxer future schema cannot silently
+    # drop them.
+    results.extend(_structural_checks(receipt, level))
     if level >= 2:
-        policy = receipt.get("policy") or {}
-        decision = policy.get("decision")
-        if decision not in _LEVEL_2_DECISIONS:
-            results.append(
-                ConformanceCheck(
-                    level=2,
-                    code="LEVEL_2_DECISION_INVALID",
-                    severity="fail",
-                    message=(f"policy.decision={decision!r} not in {sorted(_LEVEL_2_DECISIONS)}"),
-                    field="policy.decision",
-                )
-            )
-        # Spec v0.1 §2.6/§4.10: approval is required when the action
-        # PROCEEDED. A blocked require-approval receipt without an approval
-        # block is the honest record of an approval that never came. The
-        # v0.1 schema is stricter than that prose and still rejects such a
-        # receipt before this point; the v0.2-alpha schema matches the prose.
-        status = (receipt.get("execution") or {}).get("status")
-        proceeded = status in ("success", "failure")
-        if decision == "require-approval" and proceeded and not receipt.get("approval"):
-            results.append(
-                ConformanceCheck(
-                    level=2,
-                    code="LEVEL_2_APPROVAL_REQUIRED",
-                    severity="fail",
-                    message="policy.decision=require-approval but no approval block present",
-                    field="approval",
-                )
-            )
-
         results.extend(_refusal_checks(receipt))
 
     # 4. Level 3 — Portable Proof
     if level >= 3:
-        if "arguments_hash" not in receipt:
-            results.append(
-                ConformanceCheck(
-                    level=3,
-                    code="LEVEL_3_ARGUMENTS_HASH_REQUIRED",
-                    severity="fail",
-                    message="Level 3 receipts must include arguments_hash",
-                    field="arguments_hash",
-                )
-            )
-        if "receipt_hash" not in receipt:
-            results.append(
-                ConformanceCheck(
-                    level=3,
-                    code="LEVEL_3_RECEIPT_HASH_REQUIRED",
-                    severity="fail",
-                    message="Level 3 receipts must include receipt_hash",
-                    field="receipt_hash",
-                )
-            )
-
         # arguments-hash recompute (needs the original arguments)
         if "arguments_hash" in receipt:
             if arguments is None:
@@ -317,10 +272,74 @@ def check_conformance(
                 policy_store=policy_store,
                 minimum_completeness=minimum_completeness,
                 prior_receipt_hashes=prior_receipt_hashes,
+                executed_arguments=executed_arguments,
+                prior_approvals=prior_approvals,
             )
         )
 
     return sorted(results)
+
+
+def _structural_checks(receipt: dict[str, Any], level: int) -> list[ConformanceCheck]:
+    """Level 2 decision/approval rules and Level 3 hash-presence rules.
+
+    Reads only fields it can read safely, so it also runs on a receipt that
+    failed the schema for the reasons ``_schema_error_is_explained`` allows.
+    """
+    out: list[ConformanceCheck] = []
+    if level >= 2:
+        policy = receipt.get("policy")
+        decision = policy.get("decision") if isinstance(policy, dict) else None
+        if decision not in _LEVEL_2_DECISIONS:
+            out.append(
+                ConformanceCheck(
+                    level=2,
+                    code="LEVEL_2_DECISION_INVALID",
+                    severity="fail",
+                    message=(f"policy.decision={decision!r} not in {sorted(_LEVEL_2_DECISIONS)}"),
+                    field="policy.decision",
+                )
+            )
+        # Spec v0.1 §2.6/§4.10: approval is required when the action
+        # PROCEEDED. A blocked require-approval receipt without an approval
+        # block is the honest record of an approval that never came. The
+        # v0.1 schema is stricter than that prose (it requires approval on
+        # every require-approval receipt); the v0.2-alpha schema matches it.
+        execution = receipt.get("execution")
+        status = execution.get("status") if isinstance(execution, dict) else None
+        proceeded = status in ("success", "failure")
+        if decision == "require-approval" and proceeded and not receipt.get("approval"):
+            out.append(
+                ConformanceCheck(
+                    level=2,
+                    code="LEVEL_2_APPROVAL_REQUIRED",
+                    severity="fail",
+                    message="policy.decision=require-approval but no approval block present",
+                    field="approval",
+                )
+            )
+    if level >= 3:
+        if "arguments_hash" not in receipt:
+            out.append(
+                ConformanceCheck(
+                    level=3,
+                    code="LEVEL_3_ARGUMENTS_HASH_REQUIRED",
+                    severity="fail",
+                    message="Level 3 receipts must include arguments_hash",
+                    field="arguments_hash",
+                )
+            )
+        if "receipt_hash" not in receipt:
+            out.append(
+                ConformanceCheck(
+                    level=3,
+                    code="LEVEL_3_RECEIPT_HASH_REQUIRED",
+                    severity="fail",
+                    message="Level 3 receipts must include receipt_hash",
+                    field="receipt_hash",
+                )
+            )
+    return out
 
 
 def _refusal_checks(receipt: dict[str, Any]) -> list[ConformanceCheck]:
@@ -380,6 +399,8 @@ def _level_4_checks(
     policy_store: set[tuple[str, str]] | None,
     minimum_completeness: float | None,
     prior_receipt_hashes: dict[str, str] | None,
+    executed_arguments: dict[str, Any] | None = None,
+    prior_approvals: Mapping[str, str] | None = None,
 ) -> list[ConformanceCheck]:
     """Run Level 4 (Tamper-Evident) checks.
 
@@ -408,8 +429,93 @@ def _level_4_checks(
             )
         )
 
-    # Approval-context checks
     approval = receipt.get("approval")
+    refused = _is_recorded_refusal(receipt)
+    execution_status = (receipt.get("execution") or {}).get("status")
+    proceeded = execution_status in ("success", "failure")
+
+    # A forward-dated approval would stretch any approval window without
+    # limit, and cannot have authorized an action that ran before it. Needs
+    # only the receipt. Not applied to a recorded refusal, whose approval is
+    # the evidence of what was refused.
+    if isinstance(approval, dict) and not refused:
+        approved_at = _parse_rfc3339(approval.get("approved_at"))
+        if issued_at is not None and approved_at is not None:
+            lead = (approved_at - issued_at).total_seconds()
+            if not lead <= APPROVAL_CLOCK_SKEW_SECONDS:
+                out.append(
+                    ConformanceCheck(
+                        level=4,
+                        code="LEVEL_4_FUTURE_DATED_APPROVAL",
+                        severity="fail",
+                        message=(
+                            f"approval.approved_at={approval.get('approved_at')!r} is "
+                            f"{lead:.0f}s after issued_at={receipt.get('issued_at')!r}; "
+                            f"more than the {APPROVAL_CLOCK_SKEW_SECONDS}s clock-skew allowance"
+                        ),
+                        field="approval.approved_at",
+                    )
+                )
+
+    # Argument mutation (spec v0.1 section 5.4): the arguments the action ran
+    # with must be the ones arguments_hash commits to, which are the ones
+    # policy evaluated.
+    if proceeded:
+        if executed_arguments is None:
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_SKIPPED_NO_EXECUTED_ARGUMENTS",
+                    severity="info",
+                    message=("executed_arguments not supplied; LEVEL_4_ARGUMENT_MUTATION skipped"),
+                )
+            )
+        else:
+            executed_hash = compute_arguments_hash(executed_arguments)
+            if executed_hash != receipt.get("arguments_hash"):
+                out.append(
+                    ConformanceCheck(
+                        level=4,
+                        code="LEVEL_4_ARGUMENT_MUTATION",
+                        severity="fail",
+                        message=(
+                            f"the action ran with arguments hashing to {executed_hash}, "
+                            f"not the arguments_hash={receipt.get('arguments_hash')} "
+                            "policy evaluated"
+                        ),
+                        field="arguments_hash",
+                    )
+                )
+
+    # Approval replay (spec v0.1 section 5.4): one approval authorizes one
+    # action. The verifier supplies the approvals it has already seen used.
+    if isinstance(approval, dict) and not refused:
+        if prior_approvals is None:
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_SKIPPED_NO_PRIOR_APPROVALS",
+                    severity="info",
+                    message="prior_approvals not supplied; LEVEL_4_APPROVAL_REPLAY skipped",
+                )
+            )
+        else:
+            used_by = prior_approvals.get(approval_fingerprint(approval))
+            if used_by is not None and used_by != receipt.get("receipt_id"):
+                out.append(
+                    ConformanceCheck(
+                        level=4,
+                        code="LEVEL_4_APPROVAL_REPLAY",
+                        severity="fail",
+                        message=(
+                            f"this approval was already used for receipt_id {used_by!r}; "
+                            "an approval authorizes one action"
+                        ),
+                        field="approval",
+                    )
+                )
+
+    # Approval-context checks
     if policy_full is None:
         out.append(
             ConformanceCheck(
@@ -422,7 +528,7 @@ def _level_4_checks(
                 ),
             )
         )
-    elif approval is not None and _is_recorded_refusal(receipt):
+    elif approval is not None and refused:
         # The stale/unauthorized checks catch an action that RAN on a bad
         # approval. This receipt records that the action was refused, so the
         # bad approval it carries is the evidence of the refusal, not a
@@ -440,25 +546,14 @@ def _level_4_checks(
             )
         )
     elif approval is not None:
-        approved_at = _parse_rfc3339(approval.get("approved_at"))
-        max_age = policy_full.get("approval_max_age_seconds")
-        if (
-            max_age is not None
-            and approved_at is not None
-            and issued_at is not None
-            and (issued_at - approved_at).total_seconds() > float(max_age)
-        ):
+        stale = _stale_approval_problem(approval, issued_at, policy_full)
+        if stale is not None:
             out.append(
                 ConformanceCheck(
                     level=4,
                     code="LEVEL_4_STALE_APPROVAL",
                     severity="fail",
-                    message=(
-                        f"approval.approved_at={approval.get('approved_at')!r} is "
-                        f"{(issued_at - approved_at).total_seconds():.0f}s before "
-                        f"issued_at={receipt.get('issued_at')!r}; exceeds "
-                        f"policy.approval_max_age_seconds={max_age}"
-                    ),
+                    message=stale,
                     field="approval.approved_at",
                 )
             )
@@ -487,7 +582,6 @@ def _level_4_checks(
     # and execution.status=success is either a broken runtime that ignored
     # the policy or a forgery.
     policy_decision = (receipt.get("policy") or {}).get("decision")
-    execution_status = (receipt.get("execution") or {}).get("status")
     if policy_decision == "deny" and execution_status == "success":
         out.append(
             ConformanceCheck(
@@ -661,6 +755,37 @@ def _level_4_checks(
             )
 
     return out
+
+
+def _stale_approval_problem(
+    approval: Mapping[str, Any], issued_at: datetime | None, policy_full: Mapping[str, Any]
+) -> str | None:
+    """Why the approval is outside the policy's window, or None if it is inside.
+
+    Written positively, so a window or timestamp the check cannot evaluate
+    (NaN, negative, a string, an unparseable time) fails rather than passes.
+    A forward-dated approval is reported separately
+    (``LEVEL_4_FUTURE_DATED_APPROVAL``); here its age is negative, which is
+    inside any window.
+    """
+    max_age = policy_full.get("approval_max_age_seconds")
+    if max_age is None:
+        return None
+    usable = (type(max_age) is int and max_age >= 0) or (
+        type(max_age) is float and math.isfinite(max_age) and max_age >= 0
+    )
+    if not usable:
+        return f"policy.approval_max_age_seconds={max_age!r} is not a finite, non-negative number"
+    approved_at = _parse_rfc3339(approval.get("approved_at"))
+    if approved_at is None or issued_at is None:
+        return "approval.approved_at or issued_at cannot be read, so the window cannot be checked"
+    age = (issued_at - approved_at).total_seconds()
+    if age <= max_age:
+        return None
+    return (
+        f"approval.approved_at={approval.get('approved_at')!r} is {age:.0f}s before "
+        f"issued_at; exceeds policy.approval_max_age_seconds={max_age}"
+    )
 
 
 def _parse_rfc3339(value: Any) -> datetime | None:

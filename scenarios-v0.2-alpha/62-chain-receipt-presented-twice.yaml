@@ -1,0 +1,34 @@
+name: 62-chain-receipt-presented-twice
+description: |
+  A receipt is presented a second time at the end of the chain, so one
+  action appears to have happened twice: CHAIN_DUPLICATE_RECEIPT_ID.
+setup:
+  receipt_version: agentboundary/v0.2-alpha
+  now: "2026-06-15T14:23:00Z"
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: allow
+      capabilities: [github.merge]
+  chain:
+    length: 3
+    inject:
+      - { op: duplicate, index: 1 }
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["CHAIN_DUPLICATE_RECEIPT_ID"]

@@ -1,0 +1,45 @@
+name: 67-approval-reused
+description: |
+  The approval on this receipt (same approver, same timestamp) was already
+  used for another action, receipt 0192c8d0-1f2a-7c3e-bf2a-0000000000a1.
+  One approval authorizes one action: LEVEL_4_APPROVAL_REPLAY (spec v0.1
+  section 5.4, threat T-02). A v0.1 approval has no token id, so the
+  approval block itself is the token.
+setup:
+  now: "2026-06-15T14:23:00Z"
+  seed_receipt_id: "0192c8d0-1f2a-7c3e-bf2a-0000000000a2"
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+      approval_max_age_seconds: 600
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2026-06-15T14:20:00Z"
+  prior_approvals:
+    - receipt_id: "0192c8d0-1f2a-7c3e-bf2a-0000000000a1"
+      approval:
+        approver: { id: "user:eng-lead@acme" }
+        approved_at: "2026-06-15T14:20:00Z"
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_4_APPROVAL_REPLAY"]

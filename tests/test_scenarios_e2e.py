@@ -10,7 +10,7 @@ import pytest
 from agentboundary.conformance import check_conformance
 from agentboundary.runtime import ReferenceImplementation
 from agentboundary.scenarios import load_scenarios_dir
-from agentboundary.scenarios.envelope import envelope_failure_codes
+from agentboundary.scenarios.context import conformance_context, offline_failure_codes
 from agentboundary.validator import validate_receipt
 
 
@@ -65,42 +65,10 @@ def test_scenario_runs_to_its_declared_expectation(scenario) -> None:
     # Conformance check
     if expect.get("conformance_level") is not None and receipt:
         level = expect["conformance_level"]
-        # Level 4 reads the matching policy and prior-receipt set out of setup
-        # so scenarios can declare adversarial context inline. For L<=3 these
-        # extras are ignored by check_conformance.
-        capability = scenario.action.get("tool", {}).get("capability")
-        policy_full = next(
-            (
-                p
-                for p in scenario.setup.get("policies", [])
-                if capability in p.get("capabilities", [])
-            ),
-            None,
-        )
-        prior_receipt_ids: set[str] | None = (
-            set(scenario.setup["prior_receipt_ids"])
-            if "prior_receipt_ids" in scenario.setup
-            else None
-        )
-        # The verifier's policy store is the union of declared policies in
-        # the scenario's setup — everything the scenario considers known-good.
-        policy_store = {
-            (p["name"], p["version"]) for p in scenario.setup.get("policies", [])
-        } or None
-        minimum_completeness = scenario.setup.get("minimum_completeness")
-        prior_receipt_hashes = scenario.setup.get("prior_receipt_hashes")
-        checks = check_conformance(
-            receipt,
-            level=level,
-            arguments=outcome.arguments,
-            policy_full=policy_full,
-            prior_receipt_ids=prior_receipt_ids,
-            policy_store=policy_store,
-            minimum_completeness=minimum_completeness,
-            prior_receipt_hashes=prior_receipt_hashes,
-        )
+        # Same context the CLI runner builds (scenarios/context.py).
+        checks = check_conformance(receipt, level=level, **conformance_context(scenario, outcome))
         actual_fails = {c.code for c in checks if c.severity == "fail"}
-        actual_fails |= envelope_failure_codes(scenario.setup, scenario.action, receipt)
+        actual_fails |= offline_failure_codes(scenario, receipt)
         for code in expect.get("failures_must_include", []):
             if code == "SCHEMA_INVALID":
                 continue  # already asserted above

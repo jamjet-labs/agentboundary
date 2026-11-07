@@ -1,0 +1,32 @@
+name: 71-escalate-executed
+description: |
+  The policy escalated and nobody resolved it, so the action was blocked.
+  The receipt is then rewritten to say the action succeeded, and rehashed.
+  An escalation with no approval resolving it cannot have run:
+  LEVEL_4_ESCALATE_EXECUTED.
+setup:
+  policies:
+    - name: agentboundary.repo.merges
+      version: "2"
+      rule: escalate
+      capabilities: [github.merge]
+action:
+  actor: { type: agent, id: "agent:claude-code:session/demo" }
+  agent:
+    framework: claude-code
+    framework_version: "2.4.1"
+    model: claude-opus-4-7
+    model_version: "20260101"
+  tool: { name: github-mcp, version: "0.7.0", capability: github.merge }
+  target:
+    system: github.com/jamjet-labs/agentboundary
+    environment: prod
+    resource_id: pull/14
+  arguments: { ref: refs/heads/main, sha: b1c2d3e4 }
+  inject:
+    - { op: mutate_field, path: execution.status, value: success, recompute_hash: true }
+expect:
+  decision: escalate
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_4_ESCALATE_EXECUTED"]

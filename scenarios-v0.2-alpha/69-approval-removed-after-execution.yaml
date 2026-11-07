@@ -1,0 +1,42 @@
+name: 69-approval-removed-after-execution
+description: |
+  The action ran under a require-approval policy, and the approval block
+  was then removed from the receipt and the hash recomputed. The schema
+  rejects the receipt, and Level 2 names the rule it broke:
+  LEVEL_2_APPROVAL_REQUIRED. Before this scenario the Level 2 rule never
+  fired in the suite, because the schema caught the receipt first.
+setup:
+  receipt_version: agentboundary/v0.2-alpha
+  now: "2026-06-15T14:23:00Z"
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+      approval_max_age_seconds: 600
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2026-06-15T14:20:00Z"
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+  inject:
+    - { op: omit_field, path: approval, recompute_hash: true }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: false
+  failures_must_include: ["SCHEMA_INVALID", "LEVEL_2_APPROVAL_REQUIRED"]

@@ -11,6 +11,7 @@
     "setup": {
       "type": "object",
       "additionalProperties": false,
+      "dependentRequired": { "chain": ["receipt_version"] },
       "properties": {
         "policies": {
           "type": "array",
@@ -99,6 +100,73 @@
           "description": "Map of receipt_id -> receipt_hash the verifier has on file; consulted for the v0.2-alpha LEVEL_4_BROKEN_CHAIN check.",
           "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
         },
+        "prior_approvals": {
+          "type": "array",
+          "description": "Approvals the verifier has already seen used, each with the receipt_id of the action it was used for. Consulted for LEVEL_4_APPROVAL_REPLAY.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["approval", "receipt_id"],
+            "properties": {
+              "approval": {
+                "type": "object",
+                "description": "The approval block exactly as a receipt records it."
+              },
+              "receipt_id": { "type": "string", "format": "uuid" }
+            }
+          }
+        },
+        "chain": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["length"],
+          "description": "Build a chain of receipts ending in a copy of this scenario's receipt, linked with prior_receipt and signed when setup.envelope is set, apply the injects, and verify it offline. Needs receipt_version agentboundary/v0.2-alpha.",
+          "properties": {
+            "length": { "type": "integer", "minimum": 2, "maximum": 8 },
+            "inject": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["op", "index"],
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "edit_and_rehash",
+                      "drop",
+                      "unlink",
+                      "relink",
+                      "duplicate",
+                      "corrupt",
+                      "resign"
+                    ]
+                  },
+                  "index": { "type": "integer", "minimum": 0 },
+                  "path": { "type": "string", "minLength": 1 },
+                  "value": {},
+                  "to": { "type": "integer", "minimum": 0 },
+                  "seed_hex": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "kid": { "type": "string", "minLength": 1 }
+                },
+                "allOf": [
+                  {
+                    "if": { "properties": { "op": { "const": "edit_and_rehash" } } },
+                    "then": { "required": ["path", "value"] }
+                  },
+                  {
+                    "if": { "properties": { "op": { "const": "relink" } } },
+                    "then": { "required": ["to"] }
+                  },
+                  {
+                    "if": { "properties": { "op": { "const": "resign" } } },
+                    "then": { "required": ["seed_hex", "kid"] }
+                  }
+                ]
+              }
+            }
+          }
+        },
         "approvals": {
           "type": "array",
           "items": {
@@ -131,6 +199,10 @@
         "tool": { "type": "object" },
         "target": { "type": "object" },
         "arguments": { "type": "object" },
+        "executed_arguments": {
+          "type": "object",
+          "description": "Arguments the agent submitted at execution when they differ from the ones policy evaluated (an agent that changed them after approval)."
+        },
         "envelope_inject": {
           "type": "array",
           "items": {

@@ -36,3 +36,10 @@ conformance suite. Versions follow the git tags (`v0.2.0-alpha.1`, ...).
 - Spec text: v0.1 section 4.12 and threat model T-05 no longer say a matching
   `receipt_hash` shows a receipt is untampered. v0.2-alpha sections 9 and 10
   describe key binding and the three properties.
+
+### CI
+
+- The 45 adapter smoke tests (`adapters/*/test_adapter.py`) now run in CI,
+  in a job of their own. They need nothing beyond the package itself. Each
+  adapter runs in its own pytest process because every adapter's module is
+  named `adapter`. The job fails if an adapter directory has no tests.

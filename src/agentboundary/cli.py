@@ -34,6 +34,7 @@ def main() -> None:
     Verify receipts, envelopes or a chain offline:
         agentboundary verify receipt.json
         agentboundary verify --keys keys.jwks r1.cose r2.cose r3.cose
+        agentboundary verify --require chained r1.json r2.json r3.json
     """
 
 
@@ -261,8 +262,19 @@ def _format_matrix(results: list[dict[str, Any]]) -> str:
     "keys_path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help=(
-        "JWK Set of trusted Ed25519 public keys. Implies --require-signature. "
-        "Without it, signatures are not checked."
+        "JWK Set of trusted Ed25519 public keys, each bound to the actors (actor_ids) "
+        "and issuers (issuers) it may sign for. Implies --require signed."
+    ),
+)
+@click.option(
+    "--require",
+    "required",
+    multiple=True,
+    type=click.Choice(["hash", "signed", "chained"]),
+    help=(
+        "Fail unless this is established (repeatable). hash: every receipt_hash matches "
+        "(always required). signed: every receipt is signed by a keyring key bound to its "
+        "actor. chained: the receipts form one unbroken chain from a genesis receipt."
     ),
 )
 @click.option(
@@ -273,12 +285,13 @@ def _format_matrix(results: list[dict[str, Any]]) -> str:
 @click.option(
     "--require-signature",
     is_flag=True,
-    help="Fail any receipt whose signature was not verified.",
+    help="Same as --require signed.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 def verify(
     paths: tuple[Path, ...],
     keys_path: Path | None,
+    required: tuple[str, ...],
     signed_statement: bool,
     require_signature: bool,
     as_json: bool,
@@ -289,8 +302,14 @@ def verify(
     or a COSE_Sign1 envelope. Several receipts are checked as one chain in
     the order given. No network access; nothing is sent anywhere.
 
-    Exit status: 0 when every check that ran passed, 1 when one failed,
-    2 on a usage error (such as an unusable keyring).
+    The report says which of hash, signed and chained the input established.
+    A matching receipt_hash alone does not show a receipt is unedited: anyone
+    who can edit it can recompute the hash. An envelope's signature must be
+    verified (--keys) for the envelope to pass.
+
+    Exit status: 0 when every check that ran passed and everything required
+    was established, 1 otherwise, 2 on a usage error (such as an unusable
+    keyring).
     """
     from agentboundary.cose import KeyringError, load_keyring
     from agentboundary.hashing import StrictJSONError, parse_json_strict
@@ -303,12 +322,15 @@ def verify(
         except (KeyringError, StrictJSONError) as exc:
             raise click.UsageError(f"--keys {keys_path}: {exc}") from exc
 
+    require = set(required)
+    if keyring is not None or require_signature:
+        require.add("signed")
     items = load_items((str(p), p.read_bytes()) for p in paths)
     report = verify_items(
         items,
         keyring,
         as_signed_statement=signed_statement,
-        require_signature=require_signature,
+        require=sorted(require, key=["hash", "signed", "chained"].index),
     )
     if as_json:
         click.echo(_json.dumps(report.to_dict(), indent=2))
@@ -317,11 +339,32 @@ def verify(
     sys.exit(0 if report.ok else 1)
 
 
+def _tamper_evidence(established: dict[str, bool]) -> str:
+    if established["signed"]:
+        return (
+            "Tamper evidence: established. Each receipt is signed by a key the keyring "
+            "binds to its actor, so an edit would break the signature."
+        )
+    if established["chained"]:
+        return (
+            "Tamper evidence: partial. The links show no receipt was removed, inserted "
+            "or reordered, but receipts are unsigned, so someone who can rewrite all of "
+            "them can rebuild the chain."
+        )
+    return (
+        "Tamper evidence: not established. A receipt can be edited and its "
+        "receipt_hash recomputed; a matching hash shows only that content and hash agree."
+    )
+
+
 def _format_verify(report: Any, have_keys: bool) -> str:
     marks = {"pass": "PASS", "fail": "FAIL", "not_checked": "----"}
     lines = ["AgentBoundary offline verifier (no network access)", ""]
     if not have_keys:
-        lines += ["No --keys given: signatures are reported as not checked.", ""]
+        lines += [
+            "No --keys given: signatures cannot be verified, so an envelope does not pass.",
+            "",
+        ]
     for r in report.receipts:
         rid = f"  receipt_id {r.receipt_id}" if r.receipt_id else ""
         lines.append(f"{r.source}  [{r.form}]{rid}")
@@ -335,6 +378,12 @@ def _format_verify(report: Any, have_keys: bool) -> str:
         lines.append(f"  {marks[c.status]}  {c.name:<34s} {code}{c.detail}")
     lines += ["", "Not checked by this verifier, whatever the input:"]
     lines += [f"  - {s}" for s in report.not_checked]
+    established = report.established()
+    lines += ["", "Established"]
+    for a in established:
+        lines.append(f"  {a.name:<9s} {'yes' if a.met else 'no ':<4s} {a.detail}")
+    lines.append(_tamper_evidence({a.name: a.met for a in established}))
+    lines.append(f"Required: {', '.join(report.required)}")
     failures = sum(
         1
         for c in [*report.chain, *(c for r in report.receipts for c in r.checks)]
@@ -342,7 +391,10 @@ def _format_verify(report: Any, have_keys: bool) -> str:
     )
     lines.append("")
     if report.ok:
-        lines.append("Result: PASS (every check that ran passed; read 'not checked' above)")
+        lines.append(
+            "Result: PASS (every check that ran passed and everything required was "
+            "established; read 'not checked' and 'Established' above)"
+        )
     else:
         lines.append(f"Result: FAIL ({failures} failed check(s))")
     return "\n".join(lines)
@@ -378,13 +430,21 @@ def sign(
     Refuses a receipt that is not schema-valid or whose receipt_hash does
     not match, so a signature never vouches for a broken record.
     """
-    from agentboundary.cose import KeyringError, load_private_jwk, sign_receipt
+    from agentboundary.cose import (
+        KeyringError,
+        binding_allows,
+        jwk_bindings,
+        load_private_jwk,
+        sign_receipt,
+    )
     from agentboundary.hashing import StrictJSONError, compute_receipt_hash, parse_json_strict
 
     if (issuer is None) != (subject is None):
         raise click.UsageError("--issuer and --subject go together")
     try:
-        private_key, kid = load_private_jwk(parse_json_strict(key_path.read_bytes()))
+        jwk = parse_json_strict(key_path.read_bytes())
+        private_key, kid = load_private_jwk(jwk)
+        actor_ids, issuers = jwk_bindings(jwk, "--key")
     except (KeyringError, StrictJSONError) as exc:
         raise click.UsageError(f"--key {key_path}: {exc}") from exc
     try:
@@ -402,6 +462,21 @@ def sign(
     if compute_receipt_hash(receipt) != receipt.get("receipt_hash"):
         click.echo(f"{receipt_path}: receipt_hash does not match, refusing to sign", err=True)
         sys.exit(1)
+    actor_id = receipt["actor"]["id"]  # schema-valid, so present and a string
+    if binding_allows(actor_ids, actor_id) is False:
+        click.echo(
+            f"{receipt_path}: key {kid!r} is bound to actor_ids {list(actor_ids or ())}, "
+            f"not to actor.id {actor_id!r}; refusing to sign",
+            err=True,
+        )
+        sys.exit(1)
+    if issuer is not None and binding_allows(issuers, issuer) is False:
+        click.echo(
+            f"{receipt_path}: key {kid!r} is bound to issuers {list(issuers or ())}, "
+            f"not to {issuer!r}; refusing to sign",
+            err=True,
+        )
+        sys.exit(1)
     envelope = sign_receipt(receipt, private_key, kid, issuer=issuer, subject=subject)
     target = out_path or receipt_path.with_name(receipt_path.name + ".cose")
     target.write_bytes(envelope)
@@ -410,6 +485,23 @@ def sign(
 
 @main.command()
 @click.option("--kid", required=True, help="Key identifier to embed in envelopes.")
+@click.option(
+    "--actor",
+    "actors",
+    multiple=True,
+    help="actor.id this key may sign receipts for (repeatable). Written as actor_ids.",
+)
+@click.option(
+    "--any-actor",
+    is_flag=True,
+    help='Let this key sign for any actor (actor_ids ["*"]), e.g. a gateway\'s key.',
+)
+@click.option(
+    "--issuer",
+    "issuers",
+    multiple=True,
+    help="CWT iss this key may sign Signed Statements for (repeatable). Written as issuers.",
+)
 @click.option(
     "--private",
     "private_path",
@@ -424,16 +516,45 @@ def sign(
     type=click.Path(dir_okay=False, path_type=Path),
     help="Where to write the public JWK Set to hand to verifiers.",
 )
-def keygen(kid: str, private_path: Path, public_path: Path) -> None:
-    """Generate an Ed25519 signing key (private JWK + public JWK Set)."""
+def keygen(
+    kid: str,
+    actors: tuple[str, ...],
+    any_actor: bool,
+    issuers: tuple[str, ...],
+    private_path: Path,
+    public_path: Path,
+) -> None:
+    """Generate an Ed25519 signing key (private JWK + public JWK Set).
+
+    The key is bound to the actors it signs for, so a verifier can refuse a
+    receipt this key signed for any other actor.
+    """
     import os
 
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-    from agentboundary.cose import private_jwk, public_jwk
+    from agentboundary.cose import (
+        ANY_IDENTITY,
+        KeyringError,
+        jwk_bindings,
+        private_jwk,
+        public_jwk,
+    )
 
     if not kid:
         raise click.UsageError("--kid must be non-empty")
+    if bool(actors) == any_actor:
+        raise click.UsageError(
+            "bind the key: pass --actor ID (repeatable) for the actors it signs for, or --any-actor"
+        )
+    binding = {
+        "actor_ids": [ANY_IDENTITY] if any_actor else list(actors),
+        "issuers": list(issuers) if issuers else None,
+    }
+    try:
+        jwk_bindings({k: v for k, v in binding.items() if v is not None}, "keygen")
+    except KeyringError as exc:
+        raise click.UsageError(str(exc)) from exc
     if private_path.resolve() == public_path.resolve():
         raise click.UsageError("--private and --public must be different files")
     for p in (private_path, public_path):
@@ -445,11 +566,11 @@ def keygen(kid: str, private_path: Path, public_path: Path) -> None:
     # key so no half-made key pair is left behind.
     fd = os.open(private_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(_json.dumps(private_jwk(key, kid), indent=2) + "\n")
+        f.write(_json.dumps(private_jwk(key, kid, **binding), indent=2) + "\n")
     try:
         fd = os.open(public_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(_json.dumps({"keys": [public_jwk(key, kid)]}, indent=2) + "\n")
+            f.write(_json.dumps({"keys": [public_jwk(key, kid, **binding)]}, indent=2) + "\n")
     except OSError as exc:
         private_path.unlink(missing_ok=True)
         raise click.ClickException(f"could not write {public_path}: {exc}") from exc

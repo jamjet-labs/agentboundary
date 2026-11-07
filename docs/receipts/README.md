@@ -19,7 +19,7 @@ Every Action Receipt is independently verifiable. Given just the JSON file, an a
 - **What policy decided?** Read `policy.name` + `policy.version` + `policy.decision`.
 - **If approval was required, who approved?** Read `approval.approver` + `approval.approved_at` + `approval.context`.
 - **What was the outcome?** Read `execution.status` + `execution.completed_at`.
-- **Is the receipt itself untampered?** Recompute `receipt_hash` over the canonicalized preceding fields; compare.
+- **Is the receipt consistent with its hash?** Recompute `receipt_hash` over the canonicalized preceding fields; compare. A match catches accidental change. It does not show the receipt is unedited, because whoever edits a receipt can recompute its hash; that needs a signature (`agentboundary verify --keys`) or the hash held somewhere the editor cannot reach.
 
 ## How to add a new example
 

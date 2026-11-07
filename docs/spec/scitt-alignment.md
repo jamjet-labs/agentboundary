@@ -111,7 +111,7 @@ What is **not** done:
 
 - Nothing is submitted to, or checked against, a Transparency Service. The verifier reports registration as not checked.
 - An attached Transparency Receipt (RFC 9943 unprotected header 394, the RFC 9942 object) is reported as present and not checked. Inclusion and consistency proofs are not verified.
-- `iss` is reported as issuer-asserted. Binding it to the signing key is the Transparency Service's job (draft §7 item 1) and is not attempted.
+- `iss` is bound to the signing key only as far as the verifier's keyring says: a key whose JWK lists `issuers` may sign only for those (`SIGNER_ISSUER_MISMATCH` otherwise). A key without `issuers` leaves `iss` issuer-asserted. Establishing that the issuer really holds the key is the Transparency Service's job (draft §7 item 1) and is not attempted.
 - The draft's registration policy also requires the service to verify the payload's native signature (§7 item 4) and that `sub` equals `scope.chain` (§7 item 5). An AgentBoundary receipt has neither, so a service enforcing the draft's policy would refuse it.
 
 ## 6. Chains
@@ -141,7 +141,7 @@ What is **not** done:
 
 ## 8. What AgentBoundary lacks
 
-- A native in-payload signature. A bare AgentBoundary receipt is tamper-evident (`receipt_hash`) but not attributable; only the COSE envelope makes it attributable.
+- A native in-payload signature. A bare AgentBoundary receipt is hash-consistent (`receipt_hash`) but neither tamper-evident against someone who can rewrite it nor attributable; only the COSE envelope makes it both.
 - Principal class, risk class, reversibility and rollback reference, governance mode, and a sandbox marker.
 - A policy content commitment (the draft's optional `governance.compliance`).
 - A chain identifier, tenant, and sequence number.

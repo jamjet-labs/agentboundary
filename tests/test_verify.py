@@ -28,6 +28,7 @@ SEED = bytes(range(32))  # TEST KEY ONLY
 OTHER_SEED = bytes(range(1, 33))  # TEST KEY ONLY
 KID = "test-key-1"
 EXAMPLE = Path(__file__).resolve().parent.parent / "docs" / "receipts" / "github-merge.json"
+EXAMPLE_ACTOR = "agent:claude-code:session/789abc"
 
 
 def _rehash(r: dict[str, Any]) -> dict[str, Any]:
@@ -131,9 +132,11 @@ class TestSingleReceipt:
         assert rr.kid == KID
         assert _status(rr.checks, "payload.canonical") == "pass"
 
-    def test_envelope_without_keyring_and_require_signature(self, key: Any) -> None:
+    def test_envelope_without_keyring_is_not_ok(self, key: Any) -> None:
+        """An envelope's signature cannot be checked without keys, so the
+        envelope must not pass. It used to pass."""
         items = load_items([_cose(json.loads(EXAMPLE.read_text()), key)])
-        assert verify_items(items, None).ok
+        assert _codes(verify_items(items, None)) == {"SIGNATURE_REQUIRED"}
         assert _codes(verify_items(items, None, require_signature=True)) == {"SIGNATURE_REQUIRED"}
 
     def test_envelope_with_bad_signature_fails(self, keyring: Any) -> None:
@@ -316,9 +319,11 @@ def runner() -> CliRunner:
 
 
 class TestCli:
-    def _keys(self, tmp_path: Path, key: Any) -> Path:
+    def _keys(self, tmp_path: Path, key: Any, **binding: Any) -> Path:
+        # --keys requires signed receipts, which needs the key bound to the actor
+        binding.setdefault("actor_ids", [EXAMPLE_ACTOR])
         p = tmp_path / "keys.jwks"
-        p.write_text(json.dumps({"keys": [public_jwk(key, KID)]}))
+        p.write_text(json.dumps({"keys": [public_jwk(key, KID, **binding)]}))
         return p
 
     def test_verify_bare_ok(self, runner: CliRunner) -> None:
@@ -363,7 +368,7 @@ class TestCli:
         args = ["sign", str(EXAMPLE), "--key", str(priv), "-o", str(out)]
         args += ["--issuer", "https://e.example", "--subject", "stream-1"]
         assert runner.invoke(main, args).exit_code == 0
-        keys = self._keys(tmp_path, key)
+        keys = self._keys(tmp_path, key, issuers=["https://e.example"])
         result = runner.invoke(
             main, ["verify", "--keys", str(keys), "--signed-statement", str(out)]
         )
@@ -396,9 +401,9 @@ class TestCli:
 
     def test_keygen(self, runner: CliRunner, tmp_path: Path) -> None:
         priv, pub = tmp_path / "k.jwk", tmp_path / "keys.jwks"
-        result = runner.invoke(
-            main, ["keygen", "--kid", "k1", "--private", str(priv), "--public", str(pub)]
-        )
+        args = ["keygen", "--kid", "k1", "--private", str(priv), "--public", str(pub)]
+        args += ["--actor", EXAMPLE_ACTOR]
+        result = runner.invoke(main, args)
         assert result.exit_code == 0, result.output
         assert stat.S_IMODE(os.stat(priv).st_mode) == 0o600
         assert load_keyring(json.loads(pub.read_text())).lookup("k1")
@@ -412,10 +417,11 @@ class TestCli:
     def test_keygen_refuses_to_overwrite(self, runner: CliRunner, tmp_path: Path) -> None:
         priv, pub = tmp_path / "k.jwk", tmp_path / "keys.jwks"
         priv.write_text("keep me")
-        result = runner.invoke(
-            main, ["keygen", "--kid", "k1", "--private", str(priv), "--public", str(pub)]
-        )
+        args = ["keygen", "--kid", "k1", "--private", str(priv), "--public", str(pub)]
+        args += ["--any-actor"]
+        result = runner.invoke(main, args)
         assert result.exit_code != 0
+        assert "refusing to overwrite" in result.output
         assert priv.read_text() == "keep me"
 
     def test_keygen_refuses_to_overwrite_the_public_file(
@@ -423,10 +429,11 @@ class TestCli:
     ) -> None:
         priv, pub = tmp_path / "k.jwk", tmp_path / "keys.jwks"
         pub.write_text("keep me")
-        result = runner.invoke(
-            main, ["keygen", "--kid", "k1", "--private", str(priv), "--public", str(pub)]
-        )
+        args = ["keygen", "--kid", "k1", "--private", str(priv), "--public", str(pub)]
+        args += ["--any-actor"]
+        result = runner.invoke(main, args)
         assert result.exit_code != 0
+        assert "refusing to overwrite" in result.output
         assert pub.read_text() == "keep me"
         assert not priv.exists()
 
@@ -532,9 +539,9 @@ class TestReviewFindings:
         self, runner: CliRunner, tmp_path: Path
     ) -> None:
         same = tmp_path / "k.json"
-        result = runner.invoke(
-            main, ["keygen", "--kid", "k1", "--private", str(same), "--public", str(same)]
-        )
+        args = ["keygen", "--kid", "k1", "--private", str(same), "--public", str(same)]
+        args += ["--any-actor"]
+        result = runner.invoke(main, args)
         assert result.exit_code == 2
         assert "different files" in result.output
         assert not same.exists()

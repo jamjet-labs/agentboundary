@@ -50,3 +50,22 @@ def test_declared_skips_are_allowed_and_still_reported(tmp_path: Path) -> None:
     result = _run(_positive_l4_without_policies(tmp_path, allowed_skips=allowed))
     assert result["passed"], result
     assert result["skipped"] == allowed
+
+
+def test_an_allowance_that_never_matches_fails(tmp_path: Path) -> None:
+    allowed = [
+        "LEVEL_4_SKIPPED_NO_POLICY_CONTEXT",
+        "LEVEL_4_SKIPPED_NO_POLICY_STORE",
+        "LEVEL_4_SKIPPED_NO_PRIOR_APPROVALS",  # not skipped: stale allowance
+    ]
+    result = _run(_positive_l4_without_policies(tmp_path, allowed_skips=allowed))
+    assert not result["passed"]
+    assert any("LEVEL_4_SKIPPED_NO_PRIOR_APPROVALS" in f for f in result["failures"])
+
+
+def test_checks_against_empty_records_are_marked() -> None:
+    result = _run(ROOT / "scenarios/38-approval-without-context.yaml")
+    assert result["passed"], result
+    notes = " ".join(result["empty_context"])
+    assert "0 prior approvals" in notes
+    assert "0 prior receipt ids" in notes

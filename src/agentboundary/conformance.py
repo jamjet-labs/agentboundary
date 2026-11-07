@@ -18,6 +18,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Literal, cast
 
 from agentboundary.hashing import canonical_json, compute_arguments_hash, compute_receipt_hash
@@ -71,19 +72,23 @@ def approval_fingerprint(approval: Mapping[str, Any]) -> str:
     and ``Z``/``+00:00``/``+01:00`` spellings of one instant match, so
     re-spelling a reused approval does not make it look new. Two approvals
     by one approver at the same microsecond with the same context cannot be
-    told apart. An approval whose time cannot be parsed keeps it verbatim.
+    told apart. A time that cannot be parsed, or whose UTC instant falls
+    outside years 1 to 9999, is used verbatim; an approver that is not an
+    object gives a null ``approver_id``.
     """
     approver = approval.get("approver")
     approver_id = approver.get("id") if isinstance(approver, Mapping) else None
     raw_time = approval.get("approved_at")
     instant = _parse_rfc3339(raw_time)
+    stamp = raw_time
+    if instant is not None:
+        try:
+            stamp = instant.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        except (OverflowError, ValueError):  # e.g. 0001-01-01T00:00:00+01:00
+            stamp = raw_time
     identity = {
         "approver_id": approver_id,
-        "approved_at": (
-            instant.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-            if instant is not None
-            else raw_time
-        ),
+        "approved_at": stamp,
         "context": approval.get("context"),
     }
     return hashlib.sha256(canonical_json(identity).encode("utf-8")).hexdigest()
@@ -459,11 +464,8 @@ def _level_4_checks(
     # there is. Needs only the receipt. Not applied to a recorded refusal,
     # whose approval is the evidence of what was refused.
     if isinstance(approval, dict) and not refused:
-        approved_at = _parse_rfc3339(approval.get("approved_at"))
-        precedes = (
-            approved_at is not None and completed_at is not None and approved_at < completed_at
-        )
-        if not precedes:
+        before = _strictly_before(approval.get("approved_at"), completed_at_raw)
+        if before is not True:
             out.append(
                 ConformanceCheck(
                     level=4,
@@ -472,7 +474,7 @@ def _level_4_checks(
                     message=(
                         f"approval.approved_at={approval.get('approved_at')!r} does not "
                         f"precede execution.completed_at={completed_at_raw!r}"
-                        if approved_at is not None and completed_at is not None
+                        if before is False
                         else "approval.approved_at or execution.completed_at cannot be read, "
                         "so the approval cannot be shown to precede completion"
                     ),
@@ -831,6 +833,29 @@ _RFC3339 = re.compile(
     r"(?:([Zz])|([+-])([01][0-9]|2[0-3]):([0-5][0-9]))",
     re.ASCII,
 )
+
+
+def _strictly_before(earlier: Any, later: Any) -> bool | None:
+    """Whether RFC 3339 time ``earlier`` is strictly before ``later``.
+
+    Compared at the full precision written, not the microseconds a datetime
+    holds: .0000001 is before .0000009. None if either cannot be read.
+    Subtracting aware datetimes cannot overflow, unlike converting to UTC.
+    """
+    a, b = _parse_rfc3339(earlier), _parse_rfc3339(later)
+    if a is None or b is None:
+        return None
+    delta = a.replace(microsecond=0) - b.replace(microsecond=0)
+    if delta != timedelta(0):
+        return delta < timedelta(0)
+    return _fraction(earlier) < _fraction(later)
+
+
+def _fraction(value: str) -> Decimal:
+    """The exact fractional second of an RFC 3339 time already known to parse."""
+    m = _RFC3339.fullmatch(value)
+    assert m is not None
+    return Decimal("0." + (m.group(7) or "0"))
 
 
 def _parse_rfc3339(value: Any) -> datetime | None:

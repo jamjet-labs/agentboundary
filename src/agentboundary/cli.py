@@ -16,8 +16,10 @@ from agentboundary.runtime import ReferenceImplementation, RuntimeOutcome
 from agentboundary.scenarios import Scenario, load_scenario, load_scenarios_dir
 from agentboundary.scenarios.context import (
     conformance_context,
+    empty_context_notes,
     offline_failure_codes,
     skipped_codes,
+    stale_allowances,
     unallowed_skips,
 )
 from agentboundary.validator import validate_receipt
@@ -122,6 +124,7 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
             "passed": False,
             "failures": [f"InternalError: {exc}"],
             "skipped": [],
+            "empty_context": [],
             "duration_ms": int((time.perf_counter() - start) * 1000),
         }
 
@@ -142,14 +145,15 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
     # Conformance expectation
     level = expect.get("conformance_level")
     checks: list[Any] = []
+    empty_context: list[str] = []
     if level is not None and outcome.receipt is not None:
         # Level 4 reads its context (the matching policy, prior receipts,
         # approvals already used, what actually ran) out of setup and the
         # outcome, so adversarial context lives next to the action. For L<=3
         # the extras are inert.
-        checks = check_conformance(
-            outcome.receipt, level=level, **conformance_context(scenario, outcome)
-        )
+        context = conformance_context(scenario, outcome)
+        checks = check_conformance(outcome.receipt, level=level, **context)
+        empty_context = empty_context_notes(scenario, context, outcome.receipt)
 
     required_codes = set(expect.get("failures_must_include", []))
     actual_fail_codes = {c.code for c in checks if c.severity == "fail"}
@@ -177,6 +181,8 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
     # every skip it accepts, so a missing context cannot pass for a check.
     for code in unallowed_skips(scenario, checks):
         failures.append(f"check skipped and not in expect.allowed_skips: {code}")
+    for code in stale_allowances(scenario, checks):
+        failures.append(f"expect.allowed_skips lists {code}, which was not skipped")
 
     # Codes that fired but weren't expected are surprises only when
     # failures_must_include is empty (positive scenario). For negative
@@ -205,6 +211,7 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
         "passed": not failures,
         "failures": failures,
         "skipped": skipped_codes(checks),
+        "empty_context": empty_context,
         "duration_ms": int((time.perf_counter() - start) * 1000),
     }
 
@@ -238,6 +245,8 @@ def _format_matrix(results: list[dict[str, Any]]) -> str:
             lines.append(f"        · {f}")
         if r.get("skipped"):
             lines.append(f"        skipped (not checked): {', '.join(r['skipped'])}")
+        for note in r.get("empty_context", []):
+            lines.append(f"        ran on an empty record: {note}")
     passed = sum(1 for r in results if r["passed"])
     failed = sum(1 for r in results if not r["passed"])
     total = sum(r["duration_ms"] for r in results)

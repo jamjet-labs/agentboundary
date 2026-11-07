@@ -447,3 +447,43 @@ class TestStrictRfc3339:
         from agentboundary.conformance import _parse_rfc3339
 
         assert _parse_rfc3339(text) is None
+
+
+class TestFourthReview:
+    def test_sub_microsecond_order_is_respected(self, receipt: dict[str, Any]) -> None:
+        """approved .0000001 is before completed .0000009: v0.1 section 3.4 holds."""
+        receipt["approval"]["approved_at"] = "2026-06-15T14:23:43.0000001Z"
+        receipt["execution"]["completed_at"] = "2026-06-15T14:23:43.0000009Z"
+        receipt["issued_at"] = "2026-06-15T14:23:43Z"
+        _rehash(receipt)
+        assert "LEVEL_4_APPROVAL_AFTER_COMPLETION" not in _fails(receipt)
+
+    def test_sub_microsecond_equal_or_later_still_fails(self, receipt: dict[str, Any]) -> None:
+        receipt["approval"]["approved_at"] = "2026-06-15T14:23:43.0000009Z"
+        receipt["execution"]["completed_at"] = "2026-06-15T14:23:43.00000090Z"
+        receipt["issued_at"] = "2026-06-15T14:23:43Z"
+        _rehash(receipt)
+        assert "LEVEL_4_APPROVAL_AFTER_COMPLETION" in _fails(receipt)
+
+    @pytest.mark.parametrize(
+        "approved_at", ["0001-01-01T00:00:00+01:00", "9999-12-31T23:30:00-01:00"]
+    )
+    def test_extreme_years_do_not_crash(self, receipt: dict[str, Any], approved_at: str) -> None:
+        receipt["approval"]["approved_at"] = approved_at
+        _rehash(receipt)
+        fp = approval_fingerprint(receipt["approval"])
+        assert len(fp) == 64
+        _fails(receipt, prior_approvals={"0" * 64: "a" * 64})  # must not raise
+
+    def test_allowed_skips_enum_matches_the_code(self) -> None:
+        import json
+        import re
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        meta = json.loads((root / "src/agentboundary/scenarios/_meta-schema.json").read_text())
+        enum = set(meta["properties"]["expect"]["properties"]["allowed_skips"]["items"]["enum"])
+        source = (root / "src/agentboundary/conformance.py").read_text()
+        codes = {c for c in re.findall(r'code="([A-Z0-9_]+)"', source) if "SKIPPED" in c}
+        assert enum == codes
+        assert len(codes) == 7

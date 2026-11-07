@@ -74,3 +74,29 @@ def unallowed_skips(scenario: Scenario, checks: list[Any]) -> list[str]:
         return []
     allowed = set(scenario.expect.get("allowed_skips", []))
     return [c for c in skipped_codes(checks) if c not in allowed]
+
+
+def stale_allowances(scenario: Scenario, checks: list[Any]) -> list[str]:
+    """allowed_skips entries that did not skip: an allowance nothing uses."""
+    skipped = set(skipped_codes(checks))
+    return [c for c in scenario.expect.get("allowed_skips", []) if c not in skipped]
+
+
+def empty_context_notes(
+    scenario: Scenario, context: dict[str, Any], receipt: dict[str, Any] | None
+) -> list[str]:
+    """Level 4 checks that ran against records the scenario left empty.
+
+    They ran and could not fail, so the output says so rather than letting
+    them read as substantive passes.
+    """
+    if scenario.expect.get("conformance_level") != 4 or receipt is None:
+        return []
+    notes = []
+    if not context["prior_receipt_ids"]:
+        notes.append("LEVEL_4_RECEIPT_ID_REPLAY: checked against 0 prior receipt ids")
+    if isinstance(receipt.get("approval"), dict) and not context["prior_approvals"]:
+        notes.append("LEVEL_4_APPROVAL_REPLAY: checked against 0 prior approvals")
+    if isinstance(receipt.get("prior_receipt"), dict) and not context["prior_receipt_hashes"]:
+        notes.append("LEVEL_4_BROKEN_CHAIN: checked against 0 prior receipt hashes")
+    return notes

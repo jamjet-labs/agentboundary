@@ -59,8 +59,10 @@ conformance suite. Versions follow the git tags (`v0.2.0-alpha.1`, ...).
 - `agentboundary run` shows the checks each scenario skipped (text and
   `--json`). A scenario's verifier treats records its setup does not list
   as empty rather than missing, so the replay and receipt-id checks run in
-  every scenario. A Level 4 scenario that expects no failure fails on any
-  skip it does not list in the new `expect.allowed_skips`.
+  every scenario, and the output marks each check that ran against such an
+  empty record. A Level 4 scenario that expects no failure fails on any
+  skip it does not list in the new `expect.allowed_skips`, and any scenario
+  fails on an `allowed_skips` entry that was not skipped.
 - The CLI runner and the test harness build the verifier context in one
   place (`agentboundary.scenarios.context`).
 - README: the comparative matrix is described as what it is, a hand-written

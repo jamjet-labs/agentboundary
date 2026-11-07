@@ -271,7 +271,18 @@
         "allowed_skips": {
           "type": "array",
           "description": "Level 4 checks this scenario accepts as skipped (LEVEL_4_SKIPPED_* codes). Any other skip fails a Level 4 scenario.",
-          "items": { "type": "string", "pattern": "SKIPPED" }
+          "items": {
+            "type": "string",
+            "enum": [
+              "SKIPPED_NO_ARGUMENTS",
+              "LEVEL_4_SKIPPED_NO_POLICY_CONTEXT",
+              "LEVEL_4_SKIPPED_NO_POLICY_STORE",
+              "LEVEL_4_SKIPPED_NO_PRIOR_RECEIPTS",
+              "LEVEL_4_SKIPPED_NO_PRIOR_RECEIPT_HASHES",
+              "LEVEL_4_SKIPPED_NO_EXECUTED_ARGUMENTS",
+              "LEVEL_4_SKIPPED_NO_PRIOR_APPROVALS"
+            ]
+          }
         },
         "assertions": {
           "type": "array",

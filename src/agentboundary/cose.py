@@ -62,9 +62,9 @@ SCITT_RECEIPTS: Final = 394  # RFC 9943 unprotected header carrying Transparency
 # content type needs to agree this value with the issuer.
 CONTENT_TYPE: Final = "application/vnd.agentboundary.receipt+json"
 
-_UNDERSTOOD_HEADERS: Final = frozenset(
-    {HDR_ALG, HDR_CRIT, HDR_CONTENT_TYPE, HDR_KID, HDR_CWT_CLAIMS}
-)
+# CWT Claims (15) is read for iss and sub only; exp, nbf and the other
+# claims are not enforced, so a crit that lists 15 is refused.
+_UNDERSTOOD_HEADERS: Final = frozenset({HDR_ALG, HDR_CRIT, HDR_CONTENT_TYPE, HDR_KID})
 
 _P: Final = 2**255 - 19
 _L: Final = 2**252 + 27742317777372353535851937790883648493
@@ -650,6 +650,17 @@ def verify_envelope(
                 "cose.cwt_claims",
                 "COSE_CWT_CLAIMS_DUPLICATED",
                 "CWT Claims (label 15) appears in both header buckets (RFC 9597 section 2)",
+            )
+        )
+        return res
+    if HDR_CWT_CLAIMS in unprotected:
+        # Unprotected claims are not covered by the signature; anyone could
+        # add or change them, so they are refused rather than ignored.
+        checks.append(
+            failed(
+                "cose.cwt_claims",
+                "COSE_CWT_CLAIMS_INVALID",
+                "CWT Claims (label 15) must be in the protected header",
             )
         )
         return res

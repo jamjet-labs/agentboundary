@@ -218,7 +218,8 @@ class TestKeyBinding:
 
     def test_unbound_key_verifies_but_does_not_establish_signed(self, key: Any) -> None:
         report = verify_items(self._env(key), self._ring(key))
-        assert report.ok  # signature verified; binding was not asked for
+        assert not report.ok  # a keyring means signed is required
+        assert _codes(report) == {"SIGNER_UNBOUND"}
         assert not _established(report)["signed"]
         statuses = {c.name: c.status for r in report.receipts for c in r.checks}
         assert statuses["signer.actor"] == "not_checked"
@@ -329,8 +330,8 @@ class TestCliBinding:
     ) -> None:
         pub = tmp_path / "keys.jwks"
         pub.write_text(json.dumps({"keys": [public_jwk(key, KID)]}))
-        priv = tmp_path / "k.jwk"
-        priv.write_text(json.dumps(private_jwk(key, KID)))
+        priv = tmp_path / "k.jwk"  # bound, so sign accepts it; the keyring is not
+        priv.write_text(json.dumps(private_jwk(key, KID, actor_ids=[ACTOR])))
         out = tmp_path / "r.cose"
         assert (
             runner.invoke(main, ["sign", str(EXAMPLE), "--key", str(priv), "-o", str(out)])
@@ -416,3 +417,109 @@ class TestReviewFindings:
 
         with pytest.raises(TypeError):
             KeyringEntry("k", b"\x00" * 32, actor_ids="agent:claude-code")  # type: ignore[arg-type]
+
+
+class TestThirdReview:
+    """Findings of the independent review of the second version."""
+
+    def _ring(self, key: Any, **binding: Any) -> Any:
+        jwk = public_jwk(key, KID)
+        jwk.update(binding)
+        return load_keyring({"keys": [jwk]})
+
+    @pytest.mark.parametrize("claims", [{1: "did:web:evil.example"}, "not a map"])
+    def test_cwt_claims_in_the_unprotected_header_are_rejected(self, key: Any, claims: Any) -> None:
+        from agentboundary.cose import HDR_CWT_CLAIMS, build_protected_header, sign_payload
+        from agentboundary.hashing import canonical_json
+
+        env = sign_payload(
+            build_protected_header(KID),
+            {HDR_CWT_CLAIMS: claims},
+            canonical_json(_receipt()).encode(),
+            key,
+        )
+        report = verify_items(load_items([("r.cose", env)]), self._ring(key, actor_ids=[ACTOR]))
+        assert not report.ok
+        assert "COSE_CWT_CLAIMS_INVALID" in _codes(report)
+        assert not _established(report)["signed"]
+
+    def test_crit_cannot_claim_cwt_claims_are_understood(self, key: Any) -> None:
+        """exp and nbf are not enforced, so label 15 is not 'understood'."""
+        from agentboundary.cose import (
+            HDR_CRIT,
+            HDR_CWT_CLAIMS,
+            build_protected_header,
+            sign_payload,
+        )
+        from agentboundary.hashing import canonical_json
+        from agentboundary.verify import NOT_CHECKED_STATEMENTS
+
+        protected = build_protected_header(KID, issuer="i", subject="s")
+        protected[HDR_CRIT] = [HDR_CWT_CLAIMS]
+        protected[HDR_CWT_CLAIMS][4] = 1  # exp: 1970
+        env = sign_payload(protected, {}, canonical_json(_receipt()).encode(), key)
+        ring = self._ring(key, actor_ids=[ACTOR], issuers=["i"])
+        report = verify_items(load_items([("r.cose", env)]), ring)
+        assert "COSE_CRIT_UNSUPPORTED" in _codes(report)
+        assert "exp" in " ".join(NOT_CHECKED_STATEMENTS)
+
+    def test_signed_is_not_established_beside_a_failure(self, key: Any) -> None:
+        env = sign_receipt(_receipt(), key, KID)  # no CWT claims
+        ring = self._ring(key, actor_ids=[ACTOR])
+        report = verify_items(load_items([("r.cose", env)]), ring, as_signed_statement=True)
+        assert "SCITT_CWT_CLAIMS_MISSING" in _codes(report)
+        assert not _established(report)["signed"]
+
+    def test_library_keyring_requires_signed(self, key: Any) -> None:
+        """Passing keys means the caller wants signed receipts, as in the CLI."""
+        env = sign_receipt(_receipt(), key, KID)
+        report = verify_items(load_items([("r.cose", env)]), self._ring(key))
+        assert not report.ok
+        assert "SIGNER_UNBOUND" in _codes(report)
+        assert report.required == ("hash", "signed")
+
+
+class TestThirdReviewCli:
+    def _priv(self, tmp_path: Path, key: Any, **binding: Any) -> Path:
+        jwk = private_jwk(key, KID)
+        jwk.update(binding)
+        path = tmp_path / "k.jwk"
+        path.write_text(json.dumps(jwk))
+        return path
+
+    def test_sign_refuses_an_issuer_when_the_key_lists_none(
+        self, runner: CliRunner, tmp_path: Path, key: Any
+    ) -> None:
+        priv = self._priv(tmp_path, key, actor_ids=[ACTOR])
+        out = tmp_path / "r.cose"
+        args = ["sign", str(EXAMPLE), "--key", str(priv), "-o", str(out)]
+        result = runner.invoke(main, [*args, "--issuer", "https://e.example", "--subject", "s"])
+        assert result.exit_code == 1
+        assert not out.exists()
+
+    def test_sign_refuses_a_key_bound_to_no_actor(
+        self, runner: CliRunner, tmp_path: Path, key: Any
+    ) -> None:
+        priv = self._priv(tmp_path, key)
+        out = tmp_path / "r.cose"
+        result = runner.invoke(main, ["sign", str(EXAMPLE), "--key", str(priv), "-o", str(out)])
+        assert result.exit_code == 1
+        assert not out.exists()
+
+    @pytest.mark.parametrize("flag", ["--actor", "--issuer"])
+    def test_keygen_refuses_a_star_value(
+        self, runner: CliRunner, tmp_path: Path, flag: str
+    ) -> None:
+        priv, pub = tmp_path / "k.jwk", tmp_path / "keys.jwks"
+        args = ["keygen", "--kid", KID, "--private", str(priv), "--public", str(pub)]
+        extra = ["--actor", ACTOR] if flag == "--issuer" else []
+        result = runner.invoke(main, [*args, *extra, flag, "*"])
+        assert result.exit_code == 2
+        assert not priv.exists()
+
+    def test_keygen_any_issuer(self, runner: CliRunner, tmp_path: Path) -> None:
+        priv, pub = tmp_path / "k.jwk", tmp_path / "keys.jwks"
+        args = ["keygen", "--kid", KID, "--private", str(priv), "--public", str(pub)]
+        result = runner.invoke(main, [*args, "--actor", ACTOR, "--any-issuer"])
+        assert result.exit_code == 0, result.output
+        assert json.loads(pub.read_text())["keys"][0]["issuers"] == ["*"]

@@ -469,18 +469,20 @@ def sign(
     if compute_receipt_hash(receipt) != receipt.get("receipt_hash"):
         click.echo(f"{receipt_path}: receipt_hash does not match, refusing to sign", err=True)
         sys.exit(1)
+    # Refuse anything outside the key's own binding, including a key that
+    # declares none: a verifier would not accept the result as signed.
     actor_id = receipt["actor"]["id"]  # schema-valid, so present and a string
-    if binding_allows(actor_ids, actor_id) is False:
+    if binding_allows(actor_ids, actor_id) is not True:
         click.echo(
             f"{receipt_path}: key {kid!r} is bound to actor_ids {list(actor_ids or ())}, "
-            f"not to actor.id {actor_id!r}; refusing to sign",
+            f"not to actor.id {actor_id!r}; refusing to sign (keygen --actor binds a key)",
             err=True,
         )
         sys.exit(1)
-    if issuer is not None and binding_allows(issuers, issuer) is False:
+    if issuer is not None and binding_allows(issuers, issuer) is not True:
         click.echo(
             f"{receipt_path}: key {kid!r} is bound to issuers {list(issuers or ())}, "
-            f"not to {issuer!r}; refusing to sign",
+            f"not to {issuer!r}; refusing to sign (keygen --issuer binds a key)",
             err=True,
         )
         sys.exit(1)
@@ -510,6 +512,11 @@ def sign(
     help="CWT iss this key may sign Signed Statements for (repeatable). Written as issuers.",
 )
 @click.option(
+    "--any-issuer",
+    is_flag=True,
+    help='Let this key sign for any CWT iss (issuers ["*"]).',
+)
+@click.option(
     "--private",
     "private_path",
     required=True,
@@ -528,6 +535,7 @@ def keygen(
     actors: tuple[str, ...],
     any_actor: bool,
     issuers: tuple[str, ...],
+    any_issuer: bool,
     private_path: Path,
     public_path: Path,
 ) -> None:
@@ -554,9 +562,15 @@ def keygen(
         raise click.UsageError(
             "bind the key: pass --actor ID (repeatable) for the actors it signs for, or --any-actor"
         )
+    if issuers and any_issuer:
+        raise click.UsageError("--issuer and --any-issuer are exclusive")
+    if ANY_IDENTITY in actors or ANY_IDENTITY in issuers:
+        raise click.UsageError(
+            f"{ANY_IDENTITY!r} is not an identity; use --any-actor or --any-issuer"
+        )
     binding = {
         "actor_ids": [ANY_IDENTITY] if any_actor else list(actors),
-        "issuers": list(issuers) if issuers else None,
+        "issuers": [ANY_IDENTITY] if any_issuer else (list(issuers) if issuers else None),
     }
     try:
         jwk_bindings({k: v for k, v in binding.items() if v is not None}, "keygen")

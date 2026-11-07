@@ -72,7 +72,10 @@ def key() -> Any:
 
 @pytest.fixture
 def keyring(key: Any) -> Any:
-    return load_keyring({"keys": [public_jwk(key, KID)]})
+    # A keyring means signed receipts are required, so the key is bound to
+    # the example's actor (and the issuer the statement tests use).
+    jwk = public_jwk(key, KID, actor_ids=[EXAMPLE_ACTOR], issuers=["https://e.example"])
+    return load_keyring({"keys": [jwk]})
 
 
 def _bare(r: dict[str, Any], name: str = "r.json") -> tuple[str, bytes]:
@@ -290,7 +293,14 @@ class TestChain:
 
     def test_key_discontinuity(self, key: Any) -> None:
         other = private_key_from_seed(OTHER_SEED)
-        ring = load_keyring({"keys": [public_jwk(key, KID), public_jwk(other, "test-key-2")]})
+        ring = load_keyring(
+            {
+                "keys": [
+                    public_jwk(key, KID, actor_ids=[EXAMPLE_ACTOR]),
+                    public_jwk(other, "test-key-2", actor_ids=[EXAMPLE_ACTOR]),
+                ]
+            }
+        )
         chain = _chain(2)
         items = load_items(
             [
@@ -351,7 +361,11 @@ class TestCli:
 
     def test_sign_then_verify(self, runner: CliRunner, tmp_path: Path, key: Any) -> None:
         priv = tmp_path / "k.jwk"
-        priv.write_text(json.dumps(private_jwk(key, KID)))
+        priv.write_text(
+            json.dumps(
+                private_jwk(key, KID, actor_ids=[EXAMPLE_ACTOR], issuers=["https://e.example"])
+            )
+        )
         out = tmp_path / "r.cose"
         result = runner.invoke(main, ["sign", str(EXAMPLE), "--key", str(priv), "-o", str(out)])
         assert result.exit_code == 0, result.output
@@ -363,7 +377,11 @@ class TestCli:
 
     def test_sign_signed_statement(self, runner: CliRunner, tmp_path: Path, key: Any) -> None:
         priv = tmp_path / "k.jwk"
-        priv.write_text(json.dumps(private_jwk(key, KID)))
+        priv.write_text(
+            json.dumps(
+                private_jwk(key, KID, actor_ids=[EXAMPLE_ACTOR], issuers=["https://e.example"])
+            )
+        )
         out = tmp_path / "r.cose"
         args = ["sign", str(EXAMPLE), "--key", str(priv), "-o", str(out)]
         args += ["--issuer", "https://e.example", "--subject", "stream-1"]
@@ -382,14 +400,22 @@ class TestCli:
         src = tmp_path / "r.json"
         src.write_text(json.dumps(r))
         priv = tmp_path / "k.jwk"
-        priv.write_text(json.dumps(private_jwk(key, KID)))
+        priv.write_text(
+            json.dumps(
+                private_jwk(key, KID, actor_ids=[EXAMPLE_ACTOR], issuers=["https://e.example"])
+            )
+        )
         result = runner.invoke(main, ["sign", str(src), "--key", str(priv)])
         assert result.exit_code == 1
         assert not (tmp_path / "r.json.cose").exists()
 
     def test_sign_issuer_needs_subject(self, runner: CliRunner, tmp_path: Path, key: Any) -> None:
         priv = tmp_path / "k.jwk"
-        priv.write_text(json.dumps(private_jwk(key, KID)))
+        priv.write_text(
+            json.dumps(
+                private_jwk(key, KID, actor_ids=[EXAMPLE_ACTOR], issuers=["https://e.example"])
+            )
+        )
         result = runner.invoke(main, ["sign", str(EXAMPLE), "--key", str(priv), "--issuer", "i"])
         assert result.exit_code == 2
 
@@ -464,7 +490,9 @@ class TestReviewFindings:
 
     def test_kid_collision_cannot_hide_a_second_signer(self, key: Any) -> None:
         mal = private_key_from_seed(OTHER_SEED)
-        ring = load_keyring({"keys": [public_jwk(key, KID), public_jwk(mal, KID)]})
+        ring = load_keyring(
+            {"keys": [public_jwk(key, KID, actor_ids=[EXAMPLE_ACTOR]), public_jwk(mal, KID)]}
+        )
         a, b, c = _chain(3)
         items = load_items(
             [

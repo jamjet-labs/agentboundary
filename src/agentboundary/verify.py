@@ -62,6 +62,8 @@ NOT_CHECKED_STATEMENTS: tuple[str, ...] = (
     "detected from one presentation; that needs a transparency log, and no "
     "Transparency Service was consulted.",
     "Unicode normalization (NFC) of strings is not checked; strings are hashed as received.",
+    "CWT claims other than iss and sub (exp, nbf, iat and the rest) are not checked; "
+    "an envelope whose crit lists the CWT Claims header is refused for that reason.",
     "Ed25519 is verified by OpenSSL (through the cryptography package) plus "
     "this verifier's own checks on S and on the public key. The project's tests "
     "hold it to the cofactorless equation with one known vector; that is a test "
@@ -114,7 +116,12 @@ class ReceiptReport:
 
     @property
     def signed(self) -> bool:
-        return self.signature_verified and self.signer_bound
+        """Signed by a bound key, and nothing else about this receipt failed."""
+        return (
+            self.signature_verified
+            and self.signer_bound
+            and not any(c.status == "fail" for c in self.checks)
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -306,16 +313,23 @@ def verify_items(
     """Verify each item, then the chain they form in presentation order.
 
     Supplying a keyring means the caller expects signed receipts, so it
-    implies ``require_signature``: otherwise an unsigned receipt could be
-    slipped into a signed chain and pass. An envelope's signature must
-    verify whatever is required: a signature that is present but was not
-    checked is not reported as passing.
+    implies ``require=("signed",)``, as ``verify --keys`` does: every receipt
+    must carry a signature that verifies under a keyring key bound to its
+    actor (and to its issuer, if the envelope names one). Otherwise an
+    unsigned receipt could be slipped into a signed chain, or a key could
+    vouch for an actor it was never trusted for. An envelope's signature
+    must verify whatever is required: a signature that is present but was
+    not checked is not reported as passing.
 
     ``require`` names properties from ``ASSURANCES`` that must be
-    established. ``"signed"`` is stricter than ``require_signature``: the
-    verifying key must also be bound to the receipt's actor (and issuer).
+    established. ``require_signature`` alone asks only for a verified
+    signature, with no key binding; it is kept for callers that have no
+    keyring and want bare receipts to fail.
     """
-    required = tuple(dict.fromkeys(("hash", *require)))
+    if keyring is not None:
+        require = (*require, "signed")
+    required = tuple(dict.fromkeys(("hash", *(r for r in ASSURANCES if r in require))))
+    required = (*required, *(r for r in dict.fromkeys(require) if r not in ASSURANCES))
     unknown = [r for r in required if r not in ASSURANCES]
     if unknown:
         raise ValueError(f"unknown requirement(s) {unknown}; choose from {list(ASSURANCES)}")

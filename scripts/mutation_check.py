@@ -44,6 +44,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "src" / "agentboundary"
 SCENARIO_DIRS = ("scenarios", "scenarios-v0.2-alpha")
+CRASHED = "<runner crashed> "
 
 
 @dataclass(frozen=True)
@@ -230,8 +231,9 @@ def run_scenarios(mutant: Mutant | None) -> list[str]:
             timeout=300,
         )
         if proc.returncode != 0:
-            # A mutant that crashes the runner is noticed; report it as such.
-            return [f"<runner crashed: {proc.stderr.strip().splitlines()[-1:]}>"]
+            # A crash is not a scenario catching the mutant; reported apart.
+            tail = proc.stderr.strip().splitlines()[-1:] or ["no output"]
+            return [f"{CRASHED}{tail[0]}"]
         return list(json.loads(proc.stdout))
 
 
@@ -281,19 +283,26 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
         results = list(pool.map(run_scenarios, mutants))
 
-    survivors = 0
+    survivors = crashed = 0
     print()
     print(f"{'mutant':<45s} {'result':<9s} killed by")
     for m, failed in zip(mutants, results, strict=True):
-        if failed:
+        if failed and failed[0].startswith(CRASHED):
+            crashed += 1
+            print(f"{m.id:<45s} {'CRASHED':<9s} {failed[0][len(CRASHED) :]}")
+        elif failed:
             shown = ", ".join(failed[:3]) + (f" (+{len(failed) - 3})" if len(failed) > 3 else "")
             print(f"{m.id:<45s} {'killed':<9s} {shown}")
         else:
             survivors += 1
             print(f"{m.id:<45s} {'SURVIVED':<9s} no scenario noticed rule {m.rule}")
+    killed = len(mutants) - survivors - crashed
     print()
-    print(f"{len(mutants)} mutants, {len(mutants) - survivors} killed, {survivors} survived")
-    return 1 if survivors or problems else 0
+    print(
+        f"{len(mutants)} mutants, {killed} killed, {survivors} survived, "
+        f"{crashed} crashed the runner"
+    )
+    return 1 if survivors or crashed or problems else 0
 
 
 if __name__ == "__main__":

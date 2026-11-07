@@ -225,9 +225,8 @@ def _approval_problem(
     approved_at = _parse_rfc3339(approval.get("approved_at"))
     current = _parse_rfc3339(now)
     if approved_at is None or current is None:
-        if max_age is not None:
-            return {"verdict": "deny", "reason_code": "approval-time-unreadable"}
-        return None
+        # Cannot show the approval precedes the action, window or not.
+        return {"verdict": "deny", "reason_code": "approval-time-unreadable"}
     age = (current - approved_at).total_seconds()
     # Checked with or without a window: a forward-dated approval cannot have
     # authorized an action that runs now.

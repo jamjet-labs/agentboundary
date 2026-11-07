@@ -20,7 +20,7 @@ setup:
       approver: { type: human, id: "user:eng-lead@acme" }
       approved_at: "2026-06-15T14:20:00Z"
   prior_approvals:
-    - receipt_id: "0192c8d0-1f2a-7c3e-bf2a-0000000000a1"
+    - receipt_hash: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
       approval:
         approver: { id: "user:eng-lead@acme" }
         approved_at: "2026-06-15T13:05:00Z"

@@ -102,17 +102,17 @@
         },
         "prior_approvals": {
           "type": "array",
-          "description": "Approvals the verifier has already seen used, each with the receipt_id of the action it was used for. Consulted for LEVEL_4_APPROVAL_REPLAY.",
+          "description": "Approvals the verifier has already seen used, each with the receipt_hash of the receipt that used it. Consulted for LEVEL_4_APPROVAL_REPLAY.",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["approval", "receipt_id"],
+            "required": ["approval", "receipt_hash"],
             "properties": {
               "approval": {
                 "type": "object",
-                "description": "The approval block exactly as a receipt records it."
+                "description": "The approval block as a receipt records it."
               },
-              "receipt_id": { "type": "string", "format": "uuid" }
+              "receipt_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
             }
           }
         },

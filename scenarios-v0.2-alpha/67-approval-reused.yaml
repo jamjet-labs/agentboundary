@@ -1,10 +1,11 @@
 name: 67-approval-reused
 description: |
-  The approval on this receipt (same approver, same timestamp) was already
-  used for another action, receipt 0192c8d0-1f2a-7c3e-bf2a-0000000000a1.
-  One approval authorizes one action: LEVEL_4_APPROVAL_REPLAY (spec v0.1
-  section 5.4, threat T-02). A v0.1 approval has no token id, so the
-  approval block itself is the token.
+  The approval on this receipt was already used by another receipt. The
+  verifier's record spells it differently (the same instant at +01:00,
+  with a display name added), and it is still the same approval: one
+  approver, one instant, one context. One approval authorizes one action:
+  LEVEL_4_APPROVAL_REPLAY (spec v0.1 section 5.4, threat T-02). A v0.1
+  approval has no token id, so those three fields identify it.
 setup:
   now: "2026-06-15T14:23:00Z"
   seed_receipt_id: "0192c8d0-1f2a-7c3e-bf2a-0000000000a2"
@@ -21,10 +22,10 @@ setup:
       approver: { type: human, id: "user:eng-lead@acme" }
       approved_at: "2026-06-15T14:20:00Z"
   prior_approvals:
-    - receipt_id: "0192c8d0-1f2a-7c3e-bf2a-0000000000a1"
+    - receipt_hash: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
       approval:
-        approver: { id: "user:eng-lead@acme" }
-        approved_at: "2026-06-15T14:20:00Z"
+        approver: { id: "user:eng-lead@acme", display_name: "Eng Lead" }
+        approved_at: "2026-06-15T15:20:00+01:00"
 action:
   actor: { type: agent, id: "agent:internal-copilot:session/demo" }
   agent:

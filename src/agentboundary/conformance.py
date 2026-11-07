@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Final, Literal, cast
 
 from agentboundary.hashing import canonical_json, compute_arguments_hash, compute_receipt_hash
@@ -61,13 +62,27 @@ APPROVAL_CLOCK_SKEW_SECONDS: Final = 60
 
 
 def approval_fingerprint(approval: Mapping[str, Any]) -> str:
-    """SHA-256 hex of the RFC 8785 serialization of an ``approval`` block.
+    """Identify an approval: SHA-256 hex of JCS over approver id, instant and context.
 
-    A v0.1 approval carries no token identifier, so the approval block
-    itself is the token: the same approver, timestamp and context. Two
-    receipts carrying the same fingerprint carry the same approval.
+    A v0.1 approval carries no token identifier, so the approval is
+    identified by who gave it (``approver.id``), when (``approved_at`` as a
+    UTC instant, so ``Z``, ``+00:00`` and ``+01:00`` spellings of one moment
+    match) and its ``context``. ``display_name`` and ``role`` are
+    presentation and are left out, so adding them does not make a reused
+    approval look new. An approval nobody can parse keeps its raw timestamp.
     """
-    return hashlib.sha256(canonical_json(dict(approval)).encode("utf-8")).hexdigest()
+    approver = approval.get("approver")
+    approver_id = approver.get("id") if isinstance(approver, Mapping) else None
+    raw_time = approval.get("approved_at")
+    instant = _parse_rfc3339(raw_time)
+    identity = {
+        "approver_id": approver_id,
+        "approved_at": (
+            instant.astimezone(timezone.utc).isoformat() if instant is not None else raw_time
+        ),
+        "context": approval.get("context"),
+    }
+    return hashlib.sha256(canonical_json(identity).encode("utf-8")).hexdigest()
 
 
 def _schema_error_is_explained(err: Any) -> bool:
@@ -172,7 +187,7 @@ def check_conformance(
     ``LEVEL_4_SKIPPED_NO_EXECUTED_ARGUMENTS`` for an action that ran.
 
     ``prior_approvals`` maps ``approval_fingerprint(approval)`` to the
-    receipt_id of the action that approval was already used for. Spec v0.1
+    receipt_hash of the receipt that already used that approval. Spec v0.1
     section 5.4 requires rejecting an approval reused for a different action
     (``LEVEL_4_APPROVAL_REPLAY``). Absence emits
     ``LEVEL_4_SKIPPED_NO_PRIOR_APPROVALS`` for a receipt carrying an approval.
@@ -440,22 +455,28 @@ def _level_4_checks(
     # the evidence of what was refused.
     if isinstance(approval, dict) and not refused:
         approved_at = _parse_rfc3339(approval.get("approved_at"))
-        if issued_at is not None and approved_at is not None:
-            lead = (approved_at - issued_at).total_seconds()
-            if not lead <= APPROVAL_CLOCK_SKEW_SECONDS:
-                out.append(
-                    ConformanceCheck(
-                        level=4,
-                        code="LEVEL_4_FUTURE_DATED_APPROVAL",
-                        severity="fail",
-                        message=(
-                            f"approval.approved_at={approval.get('approved_at')!r} is "
-                            f"{lead:.0f}s after issued_at={receipt.get('issued_at')!r}; "
-                            f"more than the {APPROVAL_CLOCK_SKEW_SECONDS}s clock-skew allowance"
-                        ),
-                        field="approval.approved_at",
-                    )
+        lead = (
+            (approved_at - issued_at).total_seconds()
+            if approved_at is not None and issued_at is not None
+            else math.nan  # cannot evaluate: fails the positive test below
+        )
+        if not lead <= APPROVAL_CLOCK_SKEW_SECONDS:
+            out.append(
+                ConformanceCheck(
+                    level=4,
+                    code="LEVEL_4_FUTURE_DATED_APPROVAL",
+                    severity="fail",
+                    message=(
+                        f"approval.approved_at={approval.get('approved_at')!r} is "
+                        f"{lead:.0f}s after issued_at={receipt.get('issued_at')!r}; "
+                        f"more than the {APPROVAL_CLOCK_SKEW_SECONDS}s clock-skew allowance"
+                        if not math.isnan(lead)
+                        else "approval.approved_at or issued_at cannot be read, so the "
+                        "approval cannot be shown to precede the action"
+                    ),
+                    field="approval.approved_at",
                 )
+            )
 
     # Argument mutation (spec v0.1 section 5.4): the arguments the action ran
     # with must be the ones arguments_hash commits to, which are the ones
@@ -471,7 +492,12 @@ def _level_4_checks(
                 )
             )
         else:
-            executed_hash = compute_arguments_hash(executed_arguments)
+            try:
+                executed_hash = compute_arguments_hash(executed_arguments)
+            except Exception:  # rfc8785 refuses NaN, huge integers, ...
+                # arguments_hash can only commit to arguments JCS can encode,
+                # so these cannot be the ones policy evaluated.
+                executed_hash = "<not canonicalizable>"
             if executed_hash != receipt.get("arguments_hash"):
                 out.append(
                     ConformanceCheck(
@@ -500,16 +526,18 @@ def _level_4_checks(
                 )
             )
         else:
+            # Keyed on receipt_hash, not receipt_id: the emitter chooses the
+            # id, so an id match is no evidence this is the same receipt.
             used_by = prior_approvals.get(approval_fingerprint(approval))
-            if used_by is not None and used_by != receipt.get("receipt_id"):
+            if used_by is not None and used_by != receipt.get("receipt_hash"):
                 out.append(
                     ConformanceCheck(
                         level=4,
                         code="LEVEL_4_APPROVAL_REPLAY",
                         severity="fail",
                         message=(
-                            f"this approval was already used for receipt_id {used_by!r}; "
-                            "an approval authorizes one action"
+                            f"this approval was already used by the receipt with "
+                            f"receipt_hash {used_by!r}; an approval authorizes one action"
                         ),
                         field="approval",
                     )
@@ -788,20 +816,36 @@ def _stale_approval_problem(
     )
 
 
-def _parse_rfc3339(value: Any) -> datetime | None:
-    """Parse an RFC 3339 timestamp permissively; return None on failure.
+_RFC3339 = re.compile(
+    r"(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?"
+    r"(?:([Zz])|([+-])(\d{2}):(\d{2}))"
+)
 
-    Returns None for None/non-string inputs so callers can short-circuit
-    cleanly when a schema-required field is absent (the schema check at
-    Level 0 has already flagged that case).
+
+def _parse_rfc3339(value: Any) -> datetime | None:
+    """Parse an RFC 3339 date-time; return None if it is not one.
+
+    Accepts every form RFC 3339 section 5.6 allows (lowercase ``t``/``z``,
+    any number of fraction digits, any offset), which ``fromisoformat`` on
+    Python 3.10 does not. Fractions beyond microseconds are truncated. A
+    leap second (``:60``) is not representable and returns None, as does a
+    non-string, so callers must treat None as "cannot evaluate".
     """
     if not isinstance(value, str):
         return None
-    s = value.replace("Z", "+00:00")
+    m = _RFC3339.fullmatch(value)
+    if m is None:
+        return None
+    year, month, day, hour, minute, second = (int(g) for g in m.groups()[:6])
+    micro = int((m.group(7) or "0")[:6].ljust(6, "0"))
+    if m.group(8):
+        tz = timezone.utc
+    else:
+        offset = timedelta(hours=int(m.group(10)), minutes=int(m.group(11)))
+        if offset >= timedelta(hours=24):
+            return None
+        tz = timezone(-offset if m.group(9) == "-" else offset)
     try:
-        dt = datetime.fromisoformat(s)
+        return datetime(year, month, day, hour, minute, second, micro, tzinfo=tz)
     except ValueError:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt

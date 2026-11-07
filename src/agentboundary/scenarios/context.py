@@ -26,7 +26,7 @@ def conformance_context(scenario: Scenario, outcome: RuntimeOutcome) -> dict[str
     # The verifier's policy store is every policy the scenario declares.
     policy_store = {(p["name"], p["version"]) for p in policies} or None
     prior_approvals = (
-        {approval_fingerprint(a["approval"]): a["receipt_id"] for a in setup["prior_approvals"]}
+        {approval_fingerprint(a["approval"]): a["receipt_hash"] for a in setup["prior_approvals"]}
         if "prior_approvals" in setup
         else None
     )

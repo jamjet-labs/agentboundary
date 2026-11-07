@@ -82,6 +82,26 @@ class TestFutureDatedApproval:
         _rehash(receipt)
         assert "LEVEL_4_FUTURE_DATED_APPROVAL" in _fails(receipt)
 
+    def test_lowercase_z_does_not_hide_it(self, receipt: dict[str, Any]) -> None:
+        receipt["approval"]["approved_at"] = "2026-06-16t14:23:00z"
+        _rehash(receipt)
+        assert "LEVEL_4_FUTURE_DATED_APPROVAL" in _fails(receipt)
+
+    def test_unreadable_time_fails_closed(self, receipt: dict[str, Any]) -> None:
+        # The schema rejects this first; the Level 4 rule must not rely on it.
+        from agentboundary.conformance import _level_4_checks
+
+        receipt["approval"]["approved_at"] = "2026-06-15T14:20:60Z"  # leap second
+        checks = _level_4_checks(
+            receipt,
+            policy_full=None,
+            prior_receipt_ids=None,
+            policy_store=None,
+            minimum_completeness=None,
+            prior_receipt_hashes=None,
+        )
+        assert "LEVEL_4_FUTURE_DATED_APPROVAL" in {c.code for c in checks}
+
     def test_small_clock_skew_is_tolerated(self, receipt: dict[str, Any]) -> None:
         receipt["approval"]["approved_at"] = "2026-06-15T14:24:00Z"  # 60s ahead
         _rehash(receipt)
@@ -121,6 +141,13 @@ class TestArgumentMutation:
         same = {"payout_cents": 4200.0, "claim_id": 789}
         assert not _fails(receipt, executed_arguments=same)
 
+    @pytest.mark.parametrize("value", [float("nan"), 2**60])
+    def test_arguments_jcs_cannot_encode_are_a_mutation(
+        self, receipt: dict[str, Any], value: Any
+    ) -> None:
+        executed = {**ARGS, "payout_cents": value}
+        assert "LEVEL_4_ARGUMENT_MUTATION" in _fails(receipt, executed_arguments=executed)
+
     def test_skipped_and_said_so_without_executed_arguments(self, receipt: dict[str, Any]) -> None:
         assert "LEVEL_4_SKIPPED_NO_EXECUTED_ARGUMENTS" in _codes(receipt, arguments=ARGS)
 
@@ -136,17 +163,48 @@ class TestArgumentMutation:
 
 class TestApprovalReplay:
     def test_same_approval_on_another_action_fails(self, receipt: dict[str, Any]) -> None:
-        seen = {approval_fingerprint(receipt["approval"]): "0192c8d0-1f2a-7c3e-bf2a-0000000000a1"}
+        seen = {approval_fingerprint(receipt["approval"]): "a" * 64}
         assert "LEVEL_4_APPROVAL_REPLAY" in _fails(receipt, prior_approvals=seen)
 
     def test_same_receipt_seen_again_is_not_a_replay(self, receipt: dict[str, Any]) -> None:
-        seen = {approval_fingerprint(receipt["approval"]): receipt["receipt_id"]}
+        seen = {approval_fingerprint(receipt["approval"]): receipt["receipt_hash"]}
         assert "LEVEL_4_APPROVAL_REPLAY" not in _fails(receipt, prior_approvals=seen)
+
+    def test_reusing_the_prior_receipt_id_does_not_exempt(self, receipt: dict[str, Any]) -> None:
+        """The emitter picks receipt_id; only an identical receipt is exempt."""
+        prior = deepcopy(receipt)
+        receipt["target"]["resource_id"] = "claim/999"
+        _rehash(receipt)  # same receipt_id, different action
+        seen = {approval_fingerprint(prior["approval"]): prior["receipt_hash"]}
+        assert "LEVEL_4_APPROVAL_REPLAY" in _fails(receipt, prior_approvals=seen)
+
+    @pytest.mark.parametrize(
+        "respell",
+        [
+            {"approved_at": "2026-06-15T14:20:00+00:00"},
+            {"approved_at": "2026-06-15T14:20:00.000Z"},
+            {"approved_at": "2026-06-15T15:20:00+01:00"},
+            {"approved_at": "2026-06-15t14:20:00z"},
+            {"approver": {"id": "user:eng-lead@acme", "display_name": "Lead", "role": "x"}},
+        ],
+    )
+    def test_respelled_approval_is_still_a_replay(
+        self, receipt: dict[str, Any], respell: dict[str, Any]
+    ) -> None:
+        seen = {approval_fingerprint(receipt["approval"]): "a" * 64}
+        receipt["approval"].update(respell)
+        _rehash(receipt)
+        assert "LEVEL_4_APPROVAL_REPLAY" in _fails(receipt, prior_approvals=seen)
 
     def test_a_different_approval_passes(self, receipt: dict[str, Any]) -> None:
         other = deepcopy(receipt["approval"])
         other["approved_at"] = "2026-06-15T13:05:00Z"
-        seen = {approval_fingerprint(other): "0192c8d0-1f2a-7c3e-bf2a-0000000000a1"}
+        seen = {approval_fingerprint(other): "a" * 64}
+        assert not _fails(receipt, prior_approvals=seen)
+
+    def test_a_different_context_is_a_different_approval(self, receipt: dict[str, Any]) -> None:
+        other = {**receipt["approval"], "context": "ticket ACME-1"}
+        seen = {approval_fingerprint(other): "a" * 64}
         assert not _fails(receipt, prior_approvals=seen)
 
     def test_skipped_and_said_so_without_context(self, receipt: dict[str, Any]) -> None:
@@ -232,12 +290,52 @@ class TestRuntime:
         fails = _fails(out.receipt, arguments=ARGS, executed_arguments=out.executed_arguments)
         assert fails == {"LEVEL_4_ARGUMENT_MUTATION"}
 
-    def test_v02_refuses_a_forward_dated_approval_without_a_window(self) -> None:
+    @pytest.mark.parametrize("approved_at", ["2026-06-16T00:00:00Z", "2026-06-16t00:00:00z"])
+    def test_v02_refuses_a_forward_dated_approval_without_a_window(self, approved_at: str) -> None:
         from agentboundary.runtime import _approval_problem
 
         policy = {k: v for k, v in POLICY.items() if k != "approval_max_age_seconds"}
-        approval = {"approver": {"id": "user:eng-lead@acme"}, "approved_at": "2026-06-16T00:00:00Z"}
+        approval = {"approver": {"id": "user:eng-lead@acme"}, "approved_at": approved_at}
         assert _approval_problem(policy, approval, "2026-06-15T14:23:00Z") == {
             "verdict": "deny",
             "reason_code": "approval-postdates-action",
         }
+
+    def test_v02_refuses_an_unreadable_approval_time_without_a_window(self) -> None:
+        from agentboundary.runtime import _approval_problem
+
+        policy = {k: v for k, v in POLICY.items() if k != "approval_max_age_seconds"}
+        approval = {"approver": {"id": "user:eng-lead@acme"}, "approved_at": "yesterday"}
+        assert _approval_problem(policy, approval, "2026-06-15T14:23:00Z") == {
+            "verdict": "deny",
+            "reason_code": "approval-time-unreadable",
+        }
+
+
+class TestRfc3339:
+    @pytest.mark.parametrize(
+        ("text", "iso"),
+        [
+            ("2026-06-15T14:20:00Z", "2026-06-15T14:20:00+00:00"),
+            ("2026-06-15t14:20:00z", "2026-06-15T14:20:00+00:00"),
+            ("2026-06-15T14:20:00.123456789Z", "2026-06-15T14:20:00.123456+00:00"),
+            ("2026-06-15T15:20:00.5+01:00", "2026-06-15T14:20:00.500000+00:00"),
+            ("2026-06-15T10:20:00-04:00", "2026-06-15T14:20:00+00:00"),
+        ],
+    )
+    def test_parses_every_rfc3339_form(self, text: str, iso: str) -> None:
+        from datetime import timezone
+
+        from agentboundary.conformance import _parse_rfc3339
+
+        parsed = _parse_rfc3339(text)
+        assert parsed is not None
+        assert parsed.astimezone(timezone.utc).isoformat() == iso
+
+    @pytest.mark.parametrize(
+        "text", ["2026-06-15T14:20:00", "2026-06-15", "2026-13-01T00:00:00Z", "x", 7, None]
+    )
+    def test_rejects_what_is_not_one(self, text: object) -> None:
+        from agentboundary.conformance import _parse_rfc3339
+
+        assert _parse_rfc3339(text) is None

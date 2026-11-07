@@ -50,12 +50,16 @@ A receipt is only useful as evidence if someone who does not trust the emitter c
 agentboundary verify docs/receipts/github-merge.json
 
 # signed receipts and chains
-agentboundary keygen --kid emitter-1 --private emitter-1.jwk --public keys.jwks
+agentboundary keygen --kid emitter-1 --actor agent:claude-code:session/789abc \
+  --private emitter-1.jwk --public keys.jwks
 agentboundary sign receipt.json --key emitter-1.jwk -o receipt.cose
-agentboundary verify --keys keys.jwks --require-signature r1.cose r2.cose r3.cose
+agentboundary verify --keys keys.jwks r1.cose r2.cose r3.cose
+agentboundary verify --require chained r1.json r2.json r3.json
 ```
 
-It checks strict JSON parsing, the envelope and its Ed25519 signature against the keys you supply, that the signed payload is exactly the canonical (RFC 8785) receipt, the schema, `receipt_hash`, and, for several receipts, that they form one unbroken chain from its first receipt. Every check is reported as pass, fail, or not checked with the reason, and the report always lists what the verifier cannot establish (for example, a truncated chain tail, or whether the record is true). `verify`, `sign` and `keygen` need agentboundary 0.2.0-alpha.2 or later (`pip install --pre agentboundary`).
+It checks strict JSON parsing, the envelope and its Ed25519 signature against the keys you supply, that the signing key is bound to the receipt's `actor.id` (and to the envelope's `iss`, if it names one), that the signed payload is exactly the canonical (RFC 8785) receipt, the schema, `receipt_hash`, and, for several receipts, that they form one unbroken chain from its first receipt. Every check is reported as pass, fail, or not checked with the reason, and the report always lists what the verifier cannot establish (for example, a truncated chain tail, or whether the record is true).
+
+The report also says which of three things the input established: `hash` (every `receipt_hash` matches), `signed` (every receipt is signed by a key bound to its actor) and `chained` (the receipts link from a genesis receipt). A matching `receipt_hash` on its own is not evidence that nobody edited a receipt: anyone who can edit one can recompute its hash. `--require signed` or `--require chained` makes `verify` exit non-zero when that is not established, and `--keys` implies `--require signed`. An envelope never passes without `--keys`, since its signature could not be checked. `verify`, `sign` and `keygen` need agentboundary 0.2.0-alpha.2 or later (`pip install --pre agentboundary`).
 
 The envelope can carry the protected header shape of an RFC 9943 (SCITT) Signed Statement. AgentBoundary receipts are aligned with the [draft-noa-scitt-ai-agent-receipt-01](https://datatracker.ietf.org/doc/draft-noa-scitt-ai-agent-receipt/) field set where a field has a counterpart; they are not receipts in that draft's format. [`docs/spec/scitt-alignment.md`](docs/spec/scitt-alignment.md) maps every field and says what matches, what differs, and what each side lacks.
 

@@ -49,7 +49,20 @@ def envelope_failure_codes(
             envelope = envelope.replace(find, repl)
 
     public = key.public_key().public_bytes_raw()
-    keyring = Keyring((KeyringEntry(cfg.get("keyring_kid", kid), public),))
+    # The scenario key is trusted for the scenario's actor and issuer, as a
+    # verifier's keyring would say.
+    actor = receipt.get("actor")
+    actor_id = actor.get("id") if isinstance(actor, dict) else None
+    keyring = Keyring(
+        (
+            KeyringEntry(
+                cfg.get("keyring_kid", kid),
+                public,
+                actor_ids=(actor_id,) if isinstance(actor_id, str) and actor_id else None,
+                issuers=(cfg["issuer"],) if cfg.get("issuer") else None,
+            ),
+        )
+    )
     report = verify_items(
         load_items([("envelope", envelope)]),
         keyring,

@@ -425,7 +425,7 @@ class TestSignedStatement:
         assert res.ok
         assert not any(c.name.startswith("scitt.") for c in res.checks)
 
-    @pytest.mark.parametrize("claims", [{1: "iss"}, {2: "sub"}, {1: 7, 2: "sub"}, {1: "", 2: "s"}])
+    @pytest.mark.parametrize("claims", [{1: "iss"}, {2: "sub"}])
     def test_incomplete_claims(
         self, receipt: dict, key: Any, keyring: Keyring, claims: dict
     ) -> None:
@@ -434,6 +434,29 @@ class TestSignedStatement:
         env = sign_payload(protected, {}, _payload(receipt), key)
         res = verify_envelope(env, keyring, as_signed_statement=True)
         assert _codes(res) == {"SCITT_CWT_CLAIMS_MISSING"}
+
+    @pytest.mark.parametrize(
+        "claims",
+        [
+            {1: 7, 2: "sub"},
+            {1: "", 2: "s"},
+            {1: b"issuer-b", 2: "s"},
+            {"iss": "issuer-b", 2: "s"},
+            [1, "issuer-b"],
+        ],
+    )
+    @pytest.mark.parametrize("as_statement", [True, False])
+    def test_malformed_claims_fail_in_any_mode(
+        self, receipt: dict, key: Any, keyring: Keyring, claims: Any, as_statement: bool
+    ) -> None:
+        """A malformed iss must not read as "no iss": the issuer binding of
+        the signing key would then be skipped."""
+        protected = build_protected_header(KID)
+        protected[HDR_CWT_CLAIMS] = claims
+        env = sign_payload(protected, {}, _payload(receipt), key)
+        res = verify_envelope(env, keyring, as_signed_statement=as_statement)
+        assert _codes(res) == {"COSE_CWT_CLAIMS_INVALID"}
+        assert not res.ok
 
     def test_kid_must_be_protected(self, receipt: dict, key: Any, keyring: Keyring) -> None:
         protected = build_protected_header(KID, issuer="i", subject="s")
@@ -481,7 +504,7 @@ class TestReviewFindings:
         protected[HDR_CWT_CLAIMS] = {True: "iss-x", 2: "sub"}
         env = sign_payload(protected, {}, _payload(receipt), key)
         res = verify_envelope(env, keyring, as_signed_statement=True)
-        assert "SCITT_CWT_CLAIMS_MISSING" in _codes(res)
+        assert "COSE_CWT_CLAIMS_INVALID" in _codes(res)
         assert res.issuer is None
 
     def test_bool_crit_label_is_rejected(self, receipt: dict, key: Any, keyring: Keyring) -> None:

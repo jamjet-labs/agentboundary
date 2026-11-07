@@ -38,6 +38,7 @@ rejected.
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -61,9 +62,9 @@ SCITT_RECEIPTS: Final = 394  # RFC 9943 unprotected header carrying Transparency
 # content type needs to agree this value with the issuer.
 CONTENT_TYPE: Final = "application/vnd.agentboundary.receipt+json"
 
-_UNDERSTOOD_HEADERS: Final = frozenset(
-    {HDR_ALG, HDR_CRIT, HDR_CONTENT_TYPE, HDR_KID, HDR_CWT_CLAIMS}
-)
+# CWT Claims (15) is read for iss and sub only; exp, nbf and the other
+# claims are not enforced, so a crit that lists 15 is refused.
+_UNDERSTOOD_HEADERS: Final = frozenset({HDR_ALG, HDR_CRIT, HDR_CONTENT_TYPE, HDR_KID})
 
 _P: Final = 2**255 - 19
 _L: Final = 2**252 + 27742317777372353535851937790883648493
@@ -191,10 +192,41 @@ def check_public_key(raw: bytes) -> str | None:
     return None
 
 
+# JWK members that bind a key to the identities it may sign for. They are
+# private (unregistered) JWK parameters, so a JWK library that does not know
+# them ignores them (RFC 7517 section 4). ANY_IDENTITY, alone in a list, says
+# the verifier accepts the key for every actor or issuer.
+JWK_ACTOR_IDS: Final = "actor_ids"
+JWK_ISSUERS: Final = "issuers"
+ANY_IDENTITY: Final = "*"
+
+
 @dataclass(frozen=True)
 class KeyringEntry:
+    """One trusted key.
+
+    ``actor_ids`` and ``issuers`` are the identities the verifier lets this
+    key sign for: receipt ``actor.id`` values and envelope CWT ``iss``
+    values. ``None`` means the keyring says nothing, so the binding cannot be
+    checked; ``("*",)`` means any identity is accepted.
+    """
+
     kid: str
     public_key: bytes
+    actor_ids: tuple[str, ...] | None = None
+    issuers: tuple[str, ...] | None = None
+
+    def __post_init__(self) -> None:
+        # A str here would make "x in bound" a substring test.
+        for name in ("actor_ids", "issuers"):
+            bound = getattr(self, name)
+            ok = bound is None or (
+                isinstance(bound, tuple)
+                and bool(bound)
+                and all(isinstance(v, str) and v for v in bound)
+            )
+            if not ok:
+                raise TypeError(f"KeyringEntry.{name} must be None or a non-empty tuple of str")
 
 
 @dataclass(frozen=True)
@@ -205,6 +237,39 @@ class Keyring:
 
     def lookup(self, kid: str) -> list[KeyringEntry]:
         return [e for e in self.entries if e.kid == kid]
+
+
+def binding_allows(bound: tuple[str, ...] | None, identity: str) -> bool | None:
+    """Whether a key bound to ``bound`` may sign for ``identity``.
+
+    Returns None when the key declares no binding (nothing to check).
+    """
+    if bound is None:
+        return None
+    return bound == (ANY_IDENTITY,) or identity in bound
+
+
+def _identity_list(jwk: Mapping[str, Any], member: str, where: str) -> tuple[str, ...] | None:
+    if member not in jwk:
+        return None
+    value = jwk[member]
+    if not isinstance(value, list) or not value or not all(isinstance(v, str) and v for v in value):
+        raise KeyringError(f"{where}.{member} must be a non-empty list of non-empty strings")
+    if ANY_IDENTITY in value and len(value) > 1:
+        raise KeyringError(f"{where}.{member}: {ANY_IDENTITY!r} must be the only entry")
+    if len(set(value)) != len(value):
+        raise KeyringError(f"{where}.{member} repeats an entry")
+    return tuple(value)
+
+
+def jwk_bindings(jwk: Any, where: str = "key") -> tuple[tuple[str, ...] | None, ...]:
+    """Return ``(actor_ids, issuers)`` declared by a JWK; None for an absent member."""
+    if not isinstance(jwk, Mapping):
+        raise KeyringError(f"{where} is not a JSON object")
+    return (
+        _identity_list(jwk, JWK_ACTOR_IDS, where),
+        _identity_list(jwk, JWK_ISSUERS, where),
+    )
 
 
 def _okp_ed25519(jwk: Any, where: str) -> tuple[str, bytes]:
@@ -223,7 +288,11 @@ def _okp_ed25519(jwk: Any, where: str) -> tuple[str, bytes]:
 
 
 def load_keyring(jwks: Any) -> Keyring:
-    """Build a keyring from a JWK Set of Ed25519 public keys."""
+    """Build a keyring from a JWK Set of Ed25519 public keys.
+
+    A key may carry ``actor_ids`` and ``issuers`` lists binding it to the
+    receipt actors and envelope issuers it may sign for.
+    """
     if not isinstance(jwks, Mapping) or not isinstance(jwks.get("keys"), list):
         raise KeyringError('keyring must be a JWK Set: {"keys": [...]}')
     entries = []
@@ -234,7 +303,8 @@ def load_keyring(jwks: Any) -> Keyring:
                 f"{where} contains private key material; a keyring holds public keys"
             )
         kid, x = _okp_ed25519(jwk, where)
-        entries.append(KeyringEntry(kid, x))
+        actor_ids, issuers = jwk_bindings(jwk, where)
+        entries.append(KeyringEntry(kid, x, actor_ids, issuers))
     return Keyring(tuple(entries))
 
 
@@ -266,12 +336,36 @@ def _raw_private(private_key: Any) -> bytes:
     )
 
 
-def public_jwk(private_key: Any, kid: str) -> dict[str, str]:
-    return {"kty": "OKP", "crv": "Ed25519", "kid": kid, "x": _b64url(_raw_public(private_key))}
+def public_jwk(
+    private_key: Any,
+    kid: str,
+    *,
+    actor_ids: Sequence[str] | None = None,
+    issuers: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    jwk: dict[str, Any] = {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "kid": kid,
+        "x": _b64url(_raw_public(private_key)),
+    }
+    if actor_ids is not None:
+        jwk[JWK_ACTOR_IDS] = list(actor_ids)
+    if issuers is not None:
+        jwk[JWK_ISSUERS] = list(issuers)
+    jwk_bindings(jwk)  # refuse to write a binding load_keyring would reject
+    return jwk
 
 
-def private_jwk(private_key: Any, kid: str) -> dict[str, str]:
-    return {**public_jwk(private_key, kid), "d": _b64url(_raw_private(private_key))}
+def private_jwk(
+    private_key: Any,
+    kid: str,
+    *,
+    actor_ids: Sequence[str] | None = None,
+    issuers: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    public = public_jwk(private_key, kid, actor_ids=actor_ids, issuers=issuers)
+    return {**public, "d": _b64url(_raw_private(private_key))}
 
 
 def load_private_jwk(jwk: Any) -> tuple[Any, str]:
@@ -368,13 +462,21 @@ class EnvelopeResult:
     payload: bytes | None = None
     kid: str | None = None
     kid_bucket: str | None = None
-    issuer: str | None = None
-    subject: str | None = None
+    issuer: str | None = None  # CWT iss, as the signer asserts it
+    subject: str | None = None  # CWT sub, as the signer asserts it
     key_fingerprint: str | None = None  # SHA-256 hex of the public key that verified
+    key: KeyringEntry | None = None  # the keyring entry whose key verified
 
     @property
     def ok(self) -> bool:
-        return not any(c.status == "fail" for c in self.checks)
+        """No check failed AND the signature verified under the keyring.
+
+        A signature that was not checked (no keyring) is not ok: without the
+        key, an altered envelope looks the same as an intact one.
+        """
+        if any(c.status == "fail" for c in self.checks):
+            return False
+        return any(c.name == "cose.signature" and c.status == "pass" for c in self.checks)
 
 
 def is_cose_sign1(data: bytes) -> bool:
@@ -393,7 +495,9 @@ def verify_envelope(
     Reports each step in ``result.checks``. ``result.payload`` is set when
     the structure was sound enough to extract the payload, whether or not
     the signature verified, so the caller can still report on the receipt;
-    callers must read ``result.ok`` before trusting it.
+    callers must read ``result.ok`` before trusting it. ``result.ok`` is
+    False whenever the signature was not verified, including when no
+    keyring was given.
     """
     import cbor2
 
@@ -549,6 +653,17 @@ def verify_envelope(
             )
         )
         return res
+    if HDR_CWT_CLAIMS in unprotected:
+        # Unprotected claims are not covered by the signature; anyone could
+        # add or change them, so they are refused rather than ignored.
+        checks.append(
+            failed(
+                "cose.cwt_claims",
+                "COSE_CWT_CLAIMS_INVALID",
+                "CWT Claims (label 15) must be in the protected header",
+            )
+        )
+        return res
 
     # kid: prefer the protected copy; report which bucket was used.
     if HDR_KID in protected:
@@ -588,9 +703,16 @@ def verify_envelope(
             )
         )
 
-    sig_check, res.key_fingerprint = _check_signature(
-        protected_bytes, payload, signature, kid, keyring
-    )
+    claims_problem = _cwt_claims_problem(protected)
+    if claims_problem is not None:
+        # A malformed iss must not read as "no iss": that would skip the
+        # issuer binding of the signing key.
+        checks.append(failed("cose.cwt_claims", "COSE_CWT_CLAIMS_INVALID", claims_problem))
+        return res
+    res.issuer, res.subject = _cwt_iss_sub(protected)
+    sig_check, res.key = _check_signature(protected_bytes, payload, signature, kid, keyring)
+    if res.key is not None:
+        res.key_fingerprint = hashlib.sha256(res.key.public_key).hexdigest()
     checks.append(sig_check)
 
     if SCITT_RECEIPTS in unprotected:
@@ -603,7 +725,7 @@ def verify_envelope(
         )
 
     if as_signed_statement:
-        checks.extend(_check_signed_statement(protected, unprotected, bucket, res))
+        checks.extend(_check_signed_statement(protected, unprotected, bucket))
     return res
 
 
@@ -636,16 +758,47 @@ def _ed25519_verify(public_key: bytes, signature: bytes, message: bytes) -> bool
     return True
 
 
+def _cwt_claims_problem(protected: Mapping[Any, Any]) -> str | None:
+    """Why the protected CWT Claims header is unusable, or None.
+
+    Absent is fine. Present, it must be a map whose keys are integers or text
+    strings, whose ``iss`` (1) and ``sub`` (2), when present, are non-empty
+    text, and which does not spell them as text keys "iss"/"sub" (RFC 8392
+    gives them integer keys; a verifier must not guess).
+    """
+    if HDR_CWT_CLAIMS not in protected:
+        return None
+    claims = protected[HDR_CWT_CLAIMS]
+    if not isinstance(claims, Mapping) or not all(_is_label(k) for k in claims):
+        return "CWT Claims (label 15) must be a map keyed by integers or text strings"
+    for label, name in ((CWT_ISS, "iss"), (CWT_SUB, "sub")):
+        if label in claims and not (isinstance(claims[label], str) and claims[label]):
+            return f"CWT claim {name} ({label}) must be a non-empty text string"
+        if name in claims:
+            return f'CWT claim {name} must use integer key {label}, not the text key "{name}"'
+    return None
+
+
+def _cwt_iss_sub(protected: Mapping[Any, Any]) -> tuple[str | None, str | None]:
+    """The protected CWT Claims ``iss`` and ``sub``, when each is a non-empty string."""
+    claims = protected.get(HDR_CWT_CLAIMS)
+    if not isinstance(claims, Mapping) or not all(_is_label(k) for k in claims):
+        return None, None
+    iss, sub = claims.get(CWT_ISS), claims.get(CWT_SUB)
+    return (
+        iss if isinstance(iss, str) and iss else None,
+        sub if isinstance(sub, str) and sub else None,
+    )
+
+
 def _check_signature(
     protected_bytes: bytes,
     payload: bytes,
     signature: bytes,
     kid: str,
     keyring: Keyring | None,
-) -> tuple[Check, str | None]:
-    """Return the signature check and, on success, the verifying key's fingerprint."""
-    import hashlib
-
+) -> tuple[Check, KeyringEntry | None]:
+    """Return the signature check and, on success, the keyring entry that verified."""
     name = "cose.signature"
     # Key-independent encoding rules apply whether or not a keyring was given.
     problem = _signature_encoding_problem(signature)
@@ -657,7 +810,7 @@ def _check_signature(
     if not candidates:
         return failed(name, "COSE_KID_UNRESOLVED", f"kid {kid!r} is not in the keyring"), None
     message = sig_structure(protected_bytes, payload)
-    verified: list[bytes] = []
+    verified: list[KeyringEntry] = []
     rejected_keys: list[str] = []
     for entry in candidates:
         key_problem = check_public_key(entry.public_key)
@@ -665,7 +818,7 @@ def _check_signature(
             rejected_keys.append(key_problem)
             continue
         if _ed25519_verify(entry.public_key, signature, message):
-            verified.append(entry.public_key)
+            verified.append(entry)
     if rejected_keys and len(rejected_keys) == len(candidates):
         return failed(name, "COSE_KEY_REJECTED", "; ".join(rejected_keys)), None
     if not verified:
@@ -686,7 +839,7 @@ def _check_signature(
             ),
             None,
         )
-    fingerprint = hashlib.sha256(verified[0]).hexdigest()
+    fingerprint = hashlib.sha256(verified[0].public_key).hexdigest()
     if len(candidates) > 1:
         detail = (
             f"verified under kid {kid!r} by key sha256:{fingerprint[:16]}; kid is ambiguous "
@@ -694,27 +847,22 @@ def _check_signature(
         )
     else:
         detail = f"Ed25519 signature verifies under kid {kid!r}"
-    return passed(name, detail), fingerprint
+    return passed(name, detail), verified[0]
 
 
 def _check_signed_statement(
     protected: Mapping[Any, Any],
     unprotected: Mapping[Any, Any],
     kid_bucket: str,
-    res: EnvelopeResult,
 ) -> list[Check]:
     out: list[Check] = []
-    claims = protected.get(HDR_CWT_CLAIMS)
-    iss = sub = None
-    if isinstance(claims, Mapping) and all(_is_label(k) for k in claims):
-        iss, sub = claims.get(CWT_ISS), claims.get(CWT_SUB)
-    if isinstance(iss, str) and iss and isinstance(sub, str) and sub:
-        res.issuer, res.subject = iss, sub
+    iss, sub = _cwt_iss_sub(protected)
+    if iss is not None and sub is not None:
         out.append(
             passed(
                 "scitt.cwt_claims",
-                f"protected CWT Claims carry iss={iss!r} and sub={sub!r}; iss is "
-                "issuer-asserted, not bound to the signing key by this verifier",
+                f"protected CWT Claims carry iss={iss!r} and sub={sub!r}; whether "
+                "the signing key may sign for iss is reported under signer.issuer",
             )
         )
     else:

@@ -130,3 +130,31 @@ jobs:
         run: pip install --upgrade pip hatch
       - name: Run slow tests (wheel install)
         run: hatch test -m slow
+
+  adapters:
+    name: adapter tests (adapters/*/test_adapter.py)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install --upgrade pip && pip install -e . pytest
+      # Each adapter imports its own module named "adapter", so each
+      # directory runs in its own pytest process. A directory with no test
+      # file, or a test file that collects nothing (exit 5), fails the job.
+      - name: Run each adapter's tests
+        run: |
+          set -euo pipefail
+          found=0
+          for dir in adapters/*/; do
+            test -f "${dir}test_adapter.py" || { echo "::error::${dir} has no test_adapter.py"; exit 1; }
+            echo "::group::${dir}"
+            python -m pytest -p no:cacheprovider -v "${dir}test_adapter.py"
+            echo "::endgroup::"
+            found=$((found + 1))
+          done
+          test "$found" -gt 0 || { echo "::error::no adapter directories found"; exit 1; }
+          echo "ran the tests of ${found} adapters"

@@ -10,7 +10,11 @@ import pytest
 from agentboundary.conformance import check_conformance
 from agentboundary.runtime import ReferenceImplementation
 from agentboundary.scenarios import load_scenarios_dir
-from agentboundary.scenarios.context import conformance_context, offline_failure_codes
+from agentboundary.scenarios.context import (
+    conformance_context,
+    offline_failure_codes,
+    unallowed_skips,
+)
 from agentboundary.validator import validate_receipt
 
 
@@ -69,6 +73,9 @@ def test_scenario_runs_to_its_declared_expectation(scenario) -> None:
         checks = check_conformance(receipt, level=level, **conformance_context(scenario, outcome))
         actual_fails = {c.code for c in checks if c.severity == "fail"}
         actual_fails |= offline_failure_codes(scenario, receipt)
+        assert not unallowed_skips(scenario, checks), (
+            f"{scenario.name}: checks skipped without allowed_skips"
+        )
         for code in expect.get("failures_must_include", []):
             if code == "SCHEMA_INVALID":
                 continue  # already asserted above

@@ -14,7 +14,12 @@ from agentboundary import __version__
 from agentboundary.conformance import check_conformance
 from agentboundary.runtime import ReferenceImplementation, RuntimeOutcome
 from agentboundary.scenarios import Scenario, load_scenario, load_scenarios_dir
-from agentboundary.scenarios.context import conformance_context, offline_failure_codes
+from agentboundary.scenarios.context import (
+    conformance_context,
+    offline_failure_codes,
+    skipped_codes,
+    unallowed_skips,
+)
 from agentboundary.validator import validate_receipt
 
 
@@ -115,6 +120,7 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
             "scenario": scenario.name,
             "passed": False,
             "failures": [f"InternalError: {exc}"],
+            "skipped": [],
             "duration_ms": int((time.perf_counter() - start) * 1000),
         }
 
@@ -166,6 +172,11 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
     for code in sorted(missing):
         failures.append(f"expected failure code missing: {code}")
 
+    # A check that was skipped did not pass. A Level 4 scenario must name
+    # every skip it accepts, so a missing context cannot pass for a check.
+    for code in unallowed_skips(scenario, checks):
+        failures.append(f"check skipped and not in expect.allowed_skips: {code}")
+
     # Codes that fired but weren't expected are surprises only when
     # failures_must_include is empty (positive scenario). For negative
     # scenarios that DID match their expected codes, extra codes are noise.
@@ -192,6 +203,7 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
         "scenario": scenario.name,
         "passed": not failures,
         "failures": failures,
+        "skipped": skipped_codes(checks),
         "duration_ms": int((time.perf_counter() - start) * 1000),
     }
 
@@ -223,6 +235,8 @@ def _format_matrix(results: list[dict[str, Any]]) -> str:
         lines.append(f"  {status}  {r['scenario']:<40s}  {r['duration_ms']:>4d}ms")
         for f in r["failures"]:
             lines.append(f"        · {f}")
+        if r.get("skipped"):
+            lines.append(f"        skipped (not checked): {', '.join(r['skipped'])}")
     passed = sum(1 for r in results if r["passed"])
     failed = sum(1 for r in results if not r["passed"])
     total = sum(r["duration_ms"] for r in results)

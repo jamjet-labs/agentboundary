@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Final, Literal
 
-from agentboundary.conformance import APPROVAL_CLOCK_SKEW_SECONDS, _parse_rfc3339
+from agentboundary.conformance import _parse_rfc3339
 from agentboundary.hashing import (
     compute_arguments_hash,
     compute_receipt_hash,
@@ -187,12 +187,6 @@ def _recordable(approval: dict[str, Any] | None) -> dict[str, Any] | None:
     return approval if ok else None
 
 
-# How far an approval may postdate the runtime's clock before it is refused
-# (APPROVAL_CLOCK_SKEW_SECONDS, shared with the Level 4 check). A small
-# allowance absorbs skew between the approval system and the runtime;
-# beyond it, a forward-dated approval would stretch the window without limit.
-
-
 def _approval_problem(
     policy: dict[str, Any], approval: dict[str, Any], now: str
 ) -> dict[str, str] | None:
@@ -228,9 +222,11 @@ def _approval_problem(
         # Cannot show the approval precedes the action, window or not.
         return {"verdict": "deny", "reason_code": "approval-time-unreadable"}
     age = (current - approved_at).total_seconds()
-    # Checked with or without a window: a forward-dated approval cannot have
-    # authorized an action that runs now.
-    if not age >= -APPROVAL_CLOCK_SKEW_SECONDS:
+    # Checked with or without a window, and with no skew allowance: spec v0.1
+    # section 2.7 needs approved_at to precede execution.completed_at, which
+    # this runtime stamps with its clock, so an approval at or after now
+    # would make the receipt invalid.
+    if not age > 0:
         return {"verdict": "deny", "reason_code": "approval-postdates-action"}
     if max_age is not None and not age <= max_age:
         return {"verdict": "expired", "reason_code": "approval-window-elapsed"}

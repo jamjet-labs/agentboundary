@@ -18,7 +18,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Final, Literal, cast
+from typing import Any, Literal, cast
 
 from agentboundary.hashing import canonical_json, compute_arguments_hash, compute_receipt_hash
 from agentboundary.provenance import compute_completeness_score
@@ -56,20 +56,22 @@ _REFUSAL_CONSISTENT_DECISIONS: dict[str, frozenset[str]] = {
 
 _L3_HASH_FIELDS = frozenset({"arguments_hash", "receipt_hash"})
 
-# How far an approval may postdate the receipt's issued_at before it is
-# treated as forward-dated. The reference runtime refuses on the same bound.
-APPROVAL_CLOCK_SKEW_SECONDS: Final = 60
-
 
 def approval_fingerprint(approval: Mapping[str, Any]) -> str:
-    """Identify an approval: SHA-256 hex of JCS over approver id, instant and context.
+    """Identify an approval (v0.2-alpha section 5.6).
 
-    A v0.1 approval carries no token identifier, so the approval is
-    identified by who gave it (``approver.id``), when (``approved_at`` as a
-    UTC instant, so ``Z``, ``+00:00`` and ``+01:00`` spellings of one moment
-    match) and its ``context``. ``display_name`` and ``role`` are
-    presentation and are left out, so adding them does not make a reused
-    approval look new. An approval nobody can parse keeps its raw timestamp.
+    SHA-256 hex of the RFC 8785 serialization of::
+
+        {"approver_id": approver.id, compared exactly (case-sensitive),
+         "approved_at": the instant in UTC as YYYY-MM-DDTHH:MM:SS.ffffffZ,
+         "context": context, or null when absent}
+
+    A v0.1 approval carries no identifier or nonce, so this is all that
+    tells two approvals apart. ``display_name`` and ``role`` are left out,
+    and ``Z``/``+00:00``/``+01:00`` spellings of one instant match, so
+    re-spelling a reused approval does not make it look new. Two approvals
+    by one approver at the same microsecond with the same context cannot be
+    told apart. An approval whose time cannot be parsed keeps it verbatim.
     """
     approver = approval.get("approver")
     approver_id = approver.get("id") if isinstance(approver, Mapping) else None
@@ -78,7 +80,9 @@ def approval_fingerprint(approval: Mapping[str, Any]) -> str:
     identity = {
         "approver_id": approver_id,
         "approved_at": (
-            instant.astimezone(timezone.utc).isoformat() if instant is not None else raw_time
+            instant.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            if instant is not None
+            else raw_time
         ),
         "context": approval.get("context"),
     }
@@ -449,30 +453,28 @@ def _level_4_checks(
     execution_status = (receipt.get("execution") or {}).get("status")
     proceeded = execution_status in ("success", "failure")
 
-    # A forward-dated approval would stretch any approval window without
-    # limit, and cannot have authorized an action that ran before it. Needs
-    # only the receipt. Not applied to a recorded refusal, whose approval is
-    # the evidence of what was refused.
+    # Spec v0.1 sections 2.7 and 3.4: approval.approved_at MUST precede
+    # execution.completed_at; an approval at or after completion is invalid.
+    # Strict, with no clock-skew allowance: the receipt's own times are all
+    # there is. Needs only the receipt. Not applied to a recorded refusal,
+    # whose approval is the evidence of what was refused.
     if isinstance(approval, dict) and not refused:
         approved_at = _parse_rfc3339(approval.get("approved_at"))
-        lead = (
-            (approved_at - issued_at).total_seconds()
-            if approved_at is not None and issued_at is not None
-            else math.nan  # cannot evaluate: fails the positive test below
+        precedes = (
+            approved_at is not None and completed_at is not None and approved_at < completed_at
         )
-        if not lead <= APPROVAL_CLOCK_SKEW_SECONDS:
+        if not precedes:
             out.append(
                 ConformanceCheck(
                     level=4,
-                    code="LEVEL_4_FUTURE_DATED_APPROVAL",
+                    code="LEVEL_4_APPROVAL_AFTER_COMPLETION",
                     severity="fail",
                     message=(
-                        f"approval.approved_at={approval.get('approved_at')!r} is "
-                        f"{lead:.0f}s after issued_at={receipt.get('issued_at')!r}; "
-                        f"more than the {APPROVAL_CLOCK_SKEW_SECONDS}s clock-skew allowance"
-                        if not math.isnan(lead)
-                        else "approval.approved_at or issued_at cannot be read, so the "
-                        "approval cannot be shown to precede the action"
+                        f"approval.approved_at={approval.get('approved_at')!r} does not "
+                        f"precede execution.completed_at={completed_at_raw!r}"
+                        if approved_at is not None and completed_at is not None
+                        else "approval.approved_at or execution.completed_at cannot be read, "
+                        "so the approval cannot be shown to precede completion"
                     ),
                     field="approval.approved_at",
                 )
@@ -574,7 +576,7 @@ def _level_4_checks(
             )
         )
     elif approval is not None:
-        stale = _stale_approval_problem(approval, issued_at, policy_full)
+        stale = _stale_approval_problem(approval, completed_at, policy_full)
         if stale is not None:
             out.append(
                 ConformanceCheck(
@@ -786,15 +788,15 @@ def _level_4_checks(
 
 
 def _stale_approval_problem(
-    approval: Mapping[str, Any], issued_at: datetime | None, policy_full: Mapping[str, Any]
+    approval: Mapping[str, Any], completed_at: datetime | None, policy_full: Mapping[str, Any]
 ) -> str | None:
     """Why the approval is outside the policy's window, or None if it is inside.
 
     Written positively, so a window or timestamp the check cannot evaluate
     (NaN, negative, a string, an unparseable time) fails rather than passes.
-    A forward-dated approval is reported separately
-    (``LEVEL_4_FUTURE_DATED_APPROVAL``); here its age is negative, which is
-    inside any window.
+    An approval at or after completion is reported separately
+    (``LEVEL_4_APPROVAL_AFTER_COMPLETION``); here its age is zero or
+    negative, which is inside any window.
     """
     max_age = policy_full.get("approval_max_age_seconds")
     if max_age is None:
@@ -805,31 +807,42 @@ def _stale_approval_problem(
     if not usable:
         return f"policy.approval_max_age_seconds={max_age!r} is not a finite, non-negative number"
     approved_at = _parse_rfc3339(approval.get("approved_at"))
-    if approved_at is None or issued_at is None:
-        return "approval.approved_at or issued_at cannot be read, so the window cannot be checked"
-    age = (issued_at - approved_at).total_seconds()
+    if approved_at is None or completed_at is None:
+        return (
+            "approval.approved_at or execution.completed_at cannot be read, "
+            "so the window cannot be checked"
+        )
+    # Threat T-09: the window runs to execution.completed_at, not issued_at,
+    # which may be later when the receipt is emitted asynchronously.
+    age = (completed_at - approved_at).total_seconds()
     if age <= max_age:
         return None
     return (
         f"approval.approved_at={approval.get('approved_at')!r} is {age:.0f}s before "
-        f"issued_at; exceeds policy.approval_max_age_seconds={max_age}"
+        f"execution.completed_at; exceeds policy.approval_max_age_seconds={max_age}"
     )
 
 
+# RFC 3339 section 5.6 date-time, ASCII digits only. The date/time separator
+# is T or t (the space the RFC's note permits by agreement is not accepted),
+# and an offset's hours and minutes must be in range.
 _RFC3339 = re.compile(
-    r"(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?"
-    r"(?:([Zz])|([+-])(\d{2}):(\d{2}))"
+    r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]+))?"
+    r"(?:([Zz])|([+-])([01][0-9]|2[0-3]):([0-5][0-9]))",
+    re.ASCII,
 )
 
 
 def _parse_rfc3339(value: Any) -> datetime | None:
     """Parse an RFC 3339 date-time; return None if it is not one.
 
-    Accepts every form RFC 3339 section 5.6 allows (lowercase ``t``/``z``,
-    any number of fraction digits, any offset), which ``fromisoformat`` on
-    Python 3.10 does not. Fractions beyond microseconds are truncated. A
-    leap second (``:60``) is not representable and returns None, as does a
-    non-string, so callers must treat None as "cannot evaluate".
+    Accepts the forms RFC 3339 section 5.6 allows (lowercase ``t``/``z``,
+    any number of fraction digits, any in-range offset), which
+    ``fromisoformat`` on Python 3.10 does not, and nothing else: no space
+    separator, no non-ASCII digits, no offset such as ``+00:99``. Fractions
+    beyond microseconds are truncated. A leap second (``:60``) is not
+    representable and returns None, as does a non-string, so callers must
+    treat None as "cannot evaluate".
     """
     if not isinstance(value, str):
         return None
@@ -842,8 +855,6 @@ def _parse_rfc3339(value: Any) -> datetime | None:
         tz = timezone.utc
     else:
         offset = timedelta(hours=int(m.group(10)), minutes=int(m.group(11)))
-        if offset >= timedelta(hours=24):
-            return None
         tz = timezone(-offset if m.group(9) == "-" else offset)
     try:
         return datetime(year, month, day, hour, minute, second, micro, tzinfo=tz)

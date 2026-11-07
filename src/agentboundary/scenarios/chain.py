@@ -28,7 +28,7 @@ import json
 import uuid
 from typing import Any
 
-from agentboundary.cose import Keyring, KeyringEntry, private_key_from_seed, sign_receipt
+from agentboundary.cose import load_keyring, private_key_from_seed, public_jwk, sign_receipt
 from agentboundary.hashing import compute_receipt_hash
 from agentboundary.runtime import V02_ALPHA
 from agentboundary.verify import load_items, verify_items
@@ -82,11 +82,18 @@ def chain_failure_codes(
     chain = build_chain(receipt, int(cfg["length"]))
     env_cfg = setup.get("envelope")
     signers: dict[int, tuple[Any, str]] = {}
-    entries: list[KeyringEntry] = []
+    # The keyring trusts each scenario key for the receipt's actor, as a
+    # verifier's keyring would say (JWK "actor_ids"). A verifier that does
+    # not read that member ignores it.
+    actor = receipt.get("actor")
+    actor_ids = (
+        [actor["id"]] if isinstance(actor, dict) and isinstance(actor.get("id"), str) else []
+    )
+    entries: list[dict[str, Any]] = []
     if env_cfg:
         key = private_key_from_seed(bytes.fromhex(env_cfg["seed_hex"]))
         signers = dict.fromkeys(range(len(chain)), (key, env_cfg["kid"]))
-        entries.append(KeyringEntry(env_cfg["kid"], key.public_key().public_bytes_raw()))
+        entries.append({**public_jwk(key, env_cfg["kid"]), "actor_ids": actor_ids})
 
     presented: list[dict[str, Any] | bytes] = list(chain)
     for op in cfg.get("inject", []):
@@ -105,7 +112,7 @@ def chain_failure_codes(
                 raise ValueError("chain inject 'resign' needs setup.envelope")
             other = private_key_from_seed(bytes.fromhex(op["seed_hex"]))
             signers[i] = (other, op["kid"])
-            entries.append(KeyringEntry(op["kid"], other.public_key().public_bytes_raw()))
+            entries.append({**public_jwk(other, op["kid"]), "actor_ids": actor_ids})
         elif kind == "drop":
             presented[i] = b""  # removed below, after every index is resolved
         elif kind == "duplicate":
@@ -129,7 +136,7 @@ def chain_failure_codes(
         else:
             sources.append((f"chain[{pos}].json", json.dumps(item).encode("utf-8")))
 
-    keyring = Keyring(tuple(entries)) if entries else None
+    keyring = load_keyring({"keys": entries}) if entries else None
     report = verify_items(load_items(sources), keyring)
     return {
         c.code

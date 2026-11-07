@@ -40,7 +40,7 @@ def test_new_rules_are_in_the_mutant_set() -> None:
     assert {
         "LEVEL_4_ARGUMENT_MUTATION",
         "LEVEL_4_APPROVAL_REPLAY",
-        "LEVEL_4_FUTURE_DATED_APPROVAL",
+        "LEVEL_4_APPROVAL_AFTER_COMPLETION",
         "CHAIN_NOT_FROM_GENESIS",
         "CHAIN_KEY_DISCONTINUITY",
     } <= rules

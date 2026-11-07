@@ -268,6 +268,11 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "allowed_skips": {
+          "type": "array",
+          "description": "Level 4 checks this scenario accepts as skipped (LEVEL_4_SKIPPED_* codes). Any other skip fails a Level 4 scenario.",
+          "items": { "type": "string", "pattern": "SKIPPED" }
+        },
         "assertions": {
           "type": "array",
           "items": {

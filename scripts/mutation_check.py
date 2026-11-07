@@ -6,7 +6,7 @@ directories with that copy. A rule no scenario notices is a rule the suite
 does not test. The script exits 1 if any mutant survives, if the unmutated
 copy fails a scenario (the control), or if a rule has no mutant.
 
-Rules covered:
+Rule mutants (each must be caught by a scenario):
 
 * every failing check site in ``conformance.py``, found by parsing the
   source, disabled by turning its severity from "fail" into "info";
@@ -16,6 +16,11 @@ Rules covered:
   everything, since the runner validates the schema itself as well;
 * one over-strict mutant: a chain check that accepts a link only to the
   newest receipt the verifier holds (scenario 32, the fork case).
+
+Condition mutants (each must be caught by a scenario or by the unit tests in
+``UNIT_TESTS``): a rule that still runs but with a weakened condition, such
+as a moved boundary, a narrower status scope, a fail-open path for an
+unreadable value, or a field dropped from the approval fingerprint.
 
 Usage::
 
@@ -44,6 +49,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "src" / "agentboundary"
 SCENARIO_DIRS = ("scenarios", "scenarios-v0.2-alpha")
+UNIT_TESTS = (
+    "tests/test_conformance.py",
+    "tests/test_conformance_soundness.py",
+    "tests/test_refusal.py",
+    "tests/test_scenario_skips.py",
+)
 CRASHED = "<runner crashed> "
 
 
@@ -54,6 +65,7 @@ class Mutant:
     file: str  # path relative to src/agentboundary
     find: str
     replace: str
+    kind: str = "rule"  # "rule": scenarios must catch it; "condition": scenarios or unit tests
 
     def apply(self, source: str) -> str:
         count = source.count(self.find)
@@ -147,6 +159,106 @@ FORK_MUTANT = Mutant(
 )
 
 
+def _cond(id: str, rule: str, file: str, find: str, replace: str) -> Mutant:
+    return Mutant(id, rule, file, find, replace, kind="condition")
+
+
+CONDITION_MUTANTS: tuple[Mutant, ...] = (
+    _cond(
+        "after-completion-boundary",
+        "LEVEL_4_APPROVAL_AFTER_COMPLETION",
+        "conformance.py",
+        "and approved_at < completed_at\n",
+        "and approved_at <= completed_at\n",
+    ),
+    _cond(
+        "after-completion-fails-open",
+        "LEVEL_4_APPROVAL_AFTER_COMPLETION",
+        "conformance.py",
+        "approved_at is not None and completed_at is not None and approved_at < completed_at\n",
+        "approved_at is None or completed_at is None or approved_at < completed_at\n",
+    ),
+    _cond(
+        "mutation-success-only",
+        "LEVEL_4_ARGUMENT_MUTATION",
+        "conformance.py",
+        '    proceeded = execution_status in ("success", "failure")\n',
+        '    proceeded = execution_status == "success"\n',
+    ),
+    _cond(
+        "replay-exempt-by-id",
+        "LEVEL_4_APPROVAL_REPLAY",
+        "conformance.py",
+        'used_by != receipt.get("receipt_hash")',
+        'used_by != receipt.get("receipt_id")',
+    ),
+    _cond(
+        "fingerprint-drops-context",
+        "LEVEL_4_APPROVAL_REPLAY",
+        "conformance.py",
+        '        "context": approval.get("context"),\n',
+        '        "context": None,\n',
+    ),
+    _cond(
+        "fingerprint-raw-time",
+        "LEVEL_4_APPROVAL_REPLAY",
+        "conformance.py",
+        '            instant.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")\n',
+        "            raw_time\n",
+    ),
+    _cond(
+        "window-fails-open",
+        "LEVEL_4_STALE_APPROVAL",
+        "conformance.py",
+        '        return f"policy.approval_max_age_seconds={max_age!r} is not a finite, '
+        'non-negative number"\n',
+        "        return None\n",
+    ),
+    _cond(
+        "window-boundary",
+        "LEVEL_4_STALE_APPROVAL",
+        "conformance.py",
+        "    if age <= max_age:\n",
+        "    if age < max_age:\n",
+    ),
+    _cond(
+        "rfc3339-space-separator",
+        "RFC 3339 parsing",
+        "conformance.py",
+        "([0-9]{2})[Tt]([0-9]{2})",
+        "([0-9]{2})[Tt ]([0-9]{2})",
+    ),
+    _cond(
+        "runtime-approval-at-now",
+        "runtime approval-postdates-action",
+        "runtime.py",
+        "    if not age > 0:\n",
+        "    if not age >= 0:\n",
+    ),
+    _cond(
+        "runtime-postdates-disabled",
+        "runtime approval-postdates-action",
+        "runtime.py",
+        "    if not age > 0:\n",
+        "    if False:\n",
+    ),
+    _cond(
+        "runtime-runs-changed-arguments",
+        "runtime arguments-mutated",
+        "runtime.py",
+        "        if executed and mutated and emit_v02:\n",
+        "        if False:\n",
+    ),
+    _cond(
+        "skips-never-fail",
+        "scenario skip rule",
+        "scenarios/context.py",
+        '    allowed = set(scenario.expect.get("allowed_skips", []))\n',
+        "    return []\n",
+    ),
+)
+
+
 def conformance_site_mutants() -> list[Mutant]:
     """One mutant per failing ConformanceCheck site in conformance.py."""
     path = PKG / "conformance.py"
@@ -185,12 +297,18 @@ def conformance_site_mutants() -> list[Mutant]:
 
 
 def all_mutants() -> list[Mutant]:
-    return [SCHEMA_MUTANT, *conformance_site_mutants(), *CHAIN_MUTANTS, FORK_MUTANT]
+    return [
+        SCHEMA_MUTANT,
+        *conformance_site_mutants(),
+        *CHAIN_MUTANTS,
+        FORK_MUTANT,
+        *CONDITION_MUTANTS,
+    ]
 
 
 def check_coverage(mutants: list[Mutant]) -> list[str]:
     """Rules with no mutant. Empty when every rule is covered."""
-    covered = {m.rule for m in mutants}
+    covered = {m.rule for m in mutants if m.kind == "rule"}
     problems = []
     conformance = (PKG / "conformance.py").read_text("utf-8")
     for code in sorted(set(re.findall(r'code="([A-Z0-9_]+)"', conformance))):
@@ -217,8 +335,10 @@ def _copy_tree(dest: Path, mutant: Mutant | None) -> Path:
     return src
 
 
-def run_scenarios(mutant: Mutant | None) -> list[str]:
-    """Names of the scenarios that fail against the (mutated) copy."""
+def run_scenarios(mutant: Mutant | None, *, unit_tests: bool = False) -> list[str]:
+    """What fails against the (mutated) copy: scenario names, then, when
+    ``unit_tests`` is set and no scenario failed, ``unit tests`` if any of
+    UNIT_TESTS fails."""
     with tempfile.TemporaryDirectory(prefix="ab-mutant-") as tmp:
         src = _copy_tree(Path(tmp), mutant)
         env = {**os.environ, "PYTHONPATH": str(src), "PYTHONDONTWRITEBYTECODE": "1"}
@@ -234,7 +354,24 @@ def run_scenarios(mutant: Mutant | None) -> list[str]:
             # A crash is not a scenario catching the mutant; reported apart.
             tail = proc.stderr.strip().splitlines()[-1:] or ["no output"]
             return [f"{CRASHED}{tail[0]}"]
-        return list(json.loads(proc.stdout))
+        failed = list(json.loads(proc.stdout))
+        if failed or not unit_tests:
+            return failed
+        tests = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", *UNIT_TESTS],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=ROOT,
+            timeout=300,
+        )
+        # pytest exit 1 means tests failed; anything else (2-5) is a usage
+        # or collection problem, which must not count as a kill.
+        if tests.returncode == 1:
+            return ["unit tests"]
+        if tests.returncode != 0:
+            return [f"{CRASHED}pytest exited {tests.returncode}"]
+        return []
 
 
 def worker(src: str) -> int:
@@ -274,14 +411,17 @@ def main() -> int:
     for p in problems:
         print(f"UNCOVERED  {p}")
 
-    control = run_scenarios(None)
+    control = run_scenarios(None, unit_tests=True)
     if control:
         print(f"CONTROL FAILED: the unmutated copy fails {control}")
         return 1
-    print("control: every scenario passes on the unmutated copy")
+    print("control: every scenario and unit test passes on the unmutated copy")
+
+    def run(m: Mutant) -> list[str]:
+        return run_scenarios(m, unit_tests=m.kind == "condition")
 
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
-        results = list(pool.map(run_scenarios, mutants))
+        results = list(pool.map(run, mutants))
 
     survivors = crashed = 0
     print()

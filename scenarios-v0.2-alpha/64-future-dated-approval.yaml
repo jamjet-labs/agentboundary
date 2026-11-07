@@ -1,10 +1,11 @@
 name: 64-future-dated-approval
 description: |
   A v0.1 runtime runs the action on an approval dated a day after the
-  receipt was issued. Measured against issued_at, its age is negative, so
-  a window check alone would call it fresh. It cannot have authorized an
-  action that ran before it: LEVEL_4_FUTURE_DATED_APPROVAL. In v0.2-alpha
-  mode the reference runtime refuses such an approval (scenario 75).
+  action completed. Its age is negative, so a window check alone would
+  call it fresh. Spec v0.1 sections 2.7 and 3.4 say approved_at must
+  precede execution.completed_at: LEVEL_4_APPROVAL_AFTER_COMPLETION. In
+  v0.2-alpha mode the reference runtime refuses such an approval
+  (scenario 75).
 setup:
   now: "2026-06-15T14:23:00Z"
   policies:
@@ -36,4 +37,4 @@ expect:
   decision: allow
   conformance_level: 4
   receipt_must_validate: true
-  failures_must_include: ["LEVEL_4_FUTURE_DATED_APPROVAL"]
+  failures_must_include: ["LEVEL_4_APPROVAL_AFTER_COMPLETION"]

@@ -71,21 +71,43 @@ def _codes(receipt: dict[str, Any], level: int = 4, **kw: Any) -> set[str]:
     return {c.code for c in check_conformance(receipt, level, **kw)}
 
 
-class TestFutureDatedApproval:
-    def test_approval_dated_after_issuance_fails(self, receipt: dict[str, Any]) -> None:
-        receipt["approval"]["approved_at"] = "2026-06-16T14:23:00Z"
-        _rehash(receipt)
-        assert "LEVEL_4_FUTURE_DATED_APPROVAL" in _fails(receipt, policy_full=POLICY)
+class TestApprovalAfterCompletion:
+    """v0.1 sections 2.7 and 3.4: approved_at MUST precede execution.completed_at."""
 
-    def test_fails_without_policy_context(self, receipt: dict[str, Any]) -> None:
+    CODE = "LEVEL_4_APPROVAL_AFTER_COMPLETION"
+
+    def _at(self, receipt: dict[str, Any], approved: str, completed: str, issued: str) -> None:
+        receipt["approval"]["approved_at"] = approved
+        receipt["execution"]["completed_at"] = completed
+        receipt["issued_at"] = issued
+        _rehash(receipt)
+
+    def test_approval_after_completion_fails(self, receipt: dict[str, Any]) -> None:
+        self._at(receipt, "2026-06-15T14:23:30Z", "2026-06-15T14:23:00Z", "2026-06-15T14:23:00Z")
+        assert self.CODE in _fails(receipt)
+
+    def test_approval_at_completion_fails(self, receipt: dict[str, Any]) -> None:
+        self._at(receipt, "2026-06-15T14:23:00Z", "2026-06-15T14:23:00Z", "2026-06-15T14:23:00Z")
+        assert self.CODE in _fails(receipt)
+
+    def test_approval_after_issuance_but_before_completion_passes(
+        self, receipt: dict[str, Any]
+    ) -> None:
+        """issued 14:00, approved 14:05, completed 14:10 is a valid v0.1 receipt."""
+        self._at(receipt, "2026-06-15T14:05:00Z", "2026-06-15T14:10:00Z", "2026-06-15T14:00:00Z")
+        assert not _fails(receipt)
+
+    def test_far_future_approval_fails_without_policy_context(
+        self, receipt: dict[str, Any]
+    ) -> None:
         receipt["approval"]["approved_at"] = "2099-01-01T00:00:00Z"
         _rehash(receipt)
-        assert "LEVEL_4_FUTURE_DATED_APPROVAL" in _fails(receipt)
+        assert self.CODE in _fails(receipt)
 
     def test_lowercase_z_does_not_hide_it(self, receipt: dict[str, Any]) -> None:
         receipt["approval"]["approved_at"] = "2026-06-16t14:23:00z"
         _rehash(receipt)
-        assert "LEVEL_4_FUTURE_DATED_APPROVAL" in _fails(receipt)
+        assert self.CODE in _fails(receipt)
 
     def test_unreadable_time_fails_closed(self, receipt: dict[str, Any]) -> None:
         # The schema rejects this first; the Level 4 rule must not rely on it.
@@ -100,12 +122,16 @@ class TestFutureDatedApproval:
             minimum_completeness=None,
             prior_receipt_hashes=None,
         )
-        assert "LEVEL_4_FUTURE_DATED_APPROVAL" in {c.code for c in checks}
+        assert self.CODE in {c.code for c in checks}
 
-    def test_small_clock_skew_is_tolerated(self, receipt: dict[str, Any]) -> None:
-        receipt["approval"]["approved_at"] = "2026-06-15T14:24:00Z"  # 60s ahead
-        _rehash(receipt)
-        assert not _fails(receipt, policy_full=POLICY)
+    def test_worked_example_receipt_passes(self) -> None:
+        import json
+        from pathlib import Path
+
+        example = (
+            Path(__file__).resolve().parent.parent / "docs/receipts/spring-service-mutation.json"
+        )
+        assert not _fails(json.loads(example.read_text()), arguments=None)
 
     def test_recorded_refusal_is_not_flagged(self, receipt: dict[str, Any]) -> None:
         receipt["version"] = "agentboundary/v0.2-alpha"
@@ -114,6 +140,28 @@ class TestFutureDatedApproval:
         receipt["refusal"] = {"verdict": "deny", "reason_code": "approval-postdates-action"}
         _rehash(receipt)
         assert not _fails(receipt, policy_full=POLICY)
+
+    def test_window_is_measured_to_completion_not_issuance(self, receipt: dict[str, Any]) -> None:
+        """Threat T-09 measures the window to execution.completed_at; a receipt
+        emitted an hour after the action is not stale for that reason."""
+        self._at(receipt, "2026-06-15T14:20:00Z", "2026-06-15T14:23:00Z", "2026-06-15T15:30:00Z")
+        # (LEVEL_4_COMPLETED_BEFORE_ISSUED also fires here; that check is
+        # inverted against v0.1 section 4.3 and is out of scope.)
+        assert "LEVEL_4_STALE_APPROVAL" not in _fails(receipt, policy_full=POLICY)
+
+    def test_verify_cli_reports_it(self, receipt: dict[str, Any], tmp_path: Any) -> None:
+        import json
+
+        from click.testing import CliRunner
+
+        from agentboundary.cli import main
+
+        self._at(receipt, "2026-06-15T14:23:30Z", "2026-06-15T14:23:00Z", "2026-06-15T14:23:00Z")
+        path = tmp_path / "r.json"
+        path.write_text(json.dumps(receipt))
+        result = CliRunner().invoke(main, ["verify", str(path)])
+        assert result.exit_code == 1
+        assert self.CODE in result.output
 
 
 class TestStaleWindowFailsClosed:
@@ -133,6 +181,13 @@ class TestStaleWindowFailsClosed:
 
 class TestArgumentMutation:
     def test_ran_with_other_arguments_fails(self, receipt: dict[str, Any]) -> None:
+        mutated = {**ARGS, "payout_cents": 420000}
+        assert "LEVEL_4_ARGUMENT_MUTATION" in _fails(receipt, executed_arguments=mutated)
+
+    def test_failed_execution_with_other_arguments_fails(self, receipt: dict[str, Any]) -> None:
+        """A failed execution still ran: the target saw the changed arguments."""
+        receipt["execution"]["status"] = "failure"
+        _rehash(receipt)
         mutated = {**ARGS, "payout_cents": 420000}
         assert "LEVEL_4_ARGUMENT_MUTATION" in _fails(receipt, executed_arguments=mutated)
 
@@ -336,6 +391,59 @@ class TestRfc3339:
         "text", ["2026-06-15T14:20:00", "2026-06-15", "2026-13-01T00:00:00Z", "x", 7, None]
     )
     def test_rejects_what_is_not_one(self, text: object) -> None:
+        from agentboundary.conformance import _parse_rfc3339
+
+        assert _parse_rfc3339(text) is None
+
+
+class TestApprovalAtOrAfterNowIsRefused:
+    @pytest.mark.parametrize("approved_at", ["2026-06-15T14:23:00Z", "2026-06-15T14:23:30Z"])
+    def test_runtime_refuses_without_a_skew_allowance(self, approved_at: str) -> None:
+        from agentboundary.runtime import _approval_problem
+
+        approval = {"approver": {"id": "user:eng-lead@acme"}, "approved_at": approved_at}
+        assert _approval_problem(POLICY, approval, "2026-06-15T14:23:00Z") == {
+            "verdict": "deny",
+            "reason_code": "approval-postdates-action",
+        }
+
+
+class TestFingerprintDefinition:
+    def test_matches_the_documented_preimage(self) -> None:
+        import hashlib
+
+        from agentboundary.hashing import canonical_json
+
+        approval = {
+            "approver": {"id": "user:eng-lead@acme", "role": "lead"},
+            "approved_at": "2026-06-15T15:20:00+01:00",
+        }
+        preimage = {
+            "approver_id": "user:eng-lead@acme",
+            "approved_at": "2026-06-15T14:20:00.000000Z",
+            "context": None,
+        }
+        expected = hashlib.sha256(canonical_json(preimage).encode()).hexdigest()
+        assert approval_fingerprint(approval) == expected
+
+    def test_a_microsecond_apart_is_another_approval(self) -> None:
+        a = {"approver": {"id": "u"}, "approved_at": "2026-06-15T14:20:00Z"}
+        b = {"approver": {"id": "u"}, "approved_at": "2026-06-15T14:20:00.000001Z"}
+        assert approval_fingerprint(a) != approval_fingerprint(b)
+
+
+class TestStrictRfc3339:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "2026-06-15T14:20:00+00:99",
+            "2026-06-15T14:20:00+24:00",
+            "2026-06-15 14:20:00Z",
+            "\uff12\uff10\uff12\uff16-06-15T14:20:00Z",  # full-width digits
+            "2026-06-15T14:20:00.Z",
+        ],
+    )
+    def test_rejects_non_rfc3339(self, text: str) -> None:
         from agentboundary.conformance import _parse_rfc3339
 
         assert _parse_rfc3339(text) is None

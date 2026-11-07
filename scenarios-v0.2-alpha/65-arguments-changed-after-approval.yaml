@@ -1,0 +1,40 @@
+name: 65-arguments-changed-after-approval
+description: |
+  Approval was given for a payout of 4200 cents. The agent then ran the
+  action with 420000, and a runtime that does not compare the two ran it.
+  The receipt's arguments_hash still commits to the approved arguments, so
+  every hash checks out; the record of what actually ran does not match:
+  LEVEL_4_ARGUMENT_MUTATION (spec v0.1 section 5.4, threat T-01).
+setup:
+  now: "2026-06-15T14:23:00Z"
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+      approval_max_age_seconds: 600
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2026-06-15T14:20:00Z"
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+  executed_arguments: { claim_id: 789, status: APPROVED, payout_cents: 420000 }
+expect:
+  decision: allow
+  conformance_level: 4
+  receipt_must_validate: true
+  failures_must_include: ["LEVEL_4_ARGUMENT_MUTATION"]

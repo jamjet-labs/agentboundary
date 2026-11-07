@@ -14,7 +14,14 @@ from agentboundary import __version__
 from agentboundary.conformance import check_conformance
 from agentboundary.runtime import ReferenceImplementation, RuntimeOutcome
 from agentboundary.scenarios import Scenario, load_scenario, load_scenarios_dir
-from agentboundary.scenarios.envelope import envelope_failure_codes
+from agentboundary.scenarios.context import (
+    conformance_context,
+    empty_context_notes,
+    offline_failure_codes,
+    skipped_codes,
+    stale_allowances,
+    unallowed_skips,
+)
 from agentboundary.validator import validate_receipt
 
 
@@ -79,13 +86,16 @@ def validate(path: Path, as_json: bool) -> None:
     "--implementation",
     default="reference",
     show_default=True,
-    help="Implementation to test against (W3 only supports 'reference').",
+    help=(
+        "Implementation to test. Only 'reference', the bundled one, is runnable; the "
+        "vendor adapters under adapters/ translate artifacts and are not run here."
+    ),
 )
 def run(path: Path, as_json: bool, implementation: str) -> None:
     """Run one scenario file or every scenario in a directory."""
     if implementation != "reference":
         raise click.BadParameter(
-            f"unknown implementation {implementation!r}; only 'reference' is supported in W3"
+            f"unknown implementation {implementation!r}; only 'reference' is runnable"
         )
 
     scenarios = load_scenarios_dir(path) if path.is_dir() else [load_scenario(path)]
@@ -113,6 +123,8 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
             "scenario": scenario.name,
             "passed": False,
             "failures": [f"InternalError: {exc}"],
+            "skipped": [],
+            "empty_context": [],
             "duration_ms": int((time.perf_counter() - start) * 1000),
         }
 
@@ -133,46 +145,23 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
     # Conformance expectation
     level = expect.get("conformance_level")
     checks: list[Any] = []
+    empty_context: list[str] = []
     if level is not None and outcome.receipt is not None:
-        # Level 4 reads the matching policy and the prior-receipt set out of
-        # setup so adversarial context lives next to the action. For L<=3 the
-        # extras are inert.
-        capability = scenario.action.get("tool", {}).get("capability")
-        policy_full = next(
-            (
-                p
-                for p in scenario.setup.get("policies", [])
-                if capability in p.get("capabilities", [])
-            ),
-            None,
-        )
-        prior_receipt_ids = (
-            set(scenario.setup["prior_receipt_ids"])
-            if "prior_receipt_ids" in scenario.setup
-            else None
-        )
-        policy_store = {
-            (p["name"], p["version"]) for p in scenario.setup.get("policies", [])
-        } or None
-        minimum_completeness = scenario.setup.get("minimum_completeness")
-        prior_receipt_hashes = scenario.setup.get("prior_receipt_hashes")
-        checks = check_conformance(
-            outcome.receipt,
-            level=level,
-            arguments=outcome.arguments,
-            policy_full=policy_full,
-            prior_receipt_ids=prior_receipt_ids,
-            policy_store=policy_store,
-            minimum_completeness=minimum_completeness,
-            prior_receipt_hashes=prior_receipt_hashes,
-        )
+        # Level 4 reads its context (the matching policy, prior receipts,
+        # approvals already used, what actually ran) out of setup and the
+        # outcome, so adversarial context lives next to the action. For L<=3
+        # the extras are inert.
+        context = conformance_context(scenario, outcome)
+        checks = check_conformance(outcome.receipt, level=level, **context)
+        empty_context = empty_context_notes(scenario, context, outcome.receipt)
 
     required_codes = set(expect.get("failures_must_include", []))
     actual_fail_codes = {c.code for c in checks if c.severity == "fail"}
     if outcome.receipt is not None:
-        actual_fail_codes |= envelope_failure_codes(
-            scenario.setup, scenario.action, outcome.receipt
-        )
+        try:
+            actual_fail_codes |= offline_failure_codes(scenario, outcome.receipt)
+        except Exception as exc:
+            failures.append(f"InternalError: {exc}")
     if schema_errors:
         actual_fail_codes.add("SCHEMA_INVALID")
 
@@ -187,6 +176,13 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
     missing = required_codes - actual_fail_codes
     for code in sorted(missing):
         failures.append(f"expected failure code missing: {code}")
+
+    # A check that was skipped did not pass. A Level 4 scenario must name
+    # every skip it accepts, so a missing context cannot pass for a check.
+    for code in unallowed_skips(scenario, checks):
+        failures.append(f"check skipped and not in expect.allowed_skips: {code}")
+    for code in stale_allowances(scenario, checks):
+        failures.append(f"expect.allowed_skips lists {code}, which was not skipped")
 
     # Codes that fired but weren't expected are surprises only when
     # failures_must_include is empty (positive scenario). For negative
@@ -214,6 +210,8 @@ def _run_one(scenario: Scenario, impl: ReferenceImplementation) -> dict[str, Any
         "scenario": scenario.name,
         "passed": not failures,
         "failures": failures,
+        "skipped": skipped_codes(checks),
+        "empty_context": empty_context,
         "duration_ms": int((time.perf_counter() - start) * 1000),
     }
 
@@ -245,6 +243,10 @@ def _format_matrix(results: list[dict[str, Any]]) -> str:
         lines.append(f"  {status}  {r['scenario']:<40s}  {r['duration_ms']:>4d}ms")
         for f in r["failures"]:
             lines.append(f"        · {f}")
+        if r.get("skipped"):
+            lines.append(f"        skipped (not checked): {', '.join(r['skipped'])}")
+        for note in r.get("empty_context", []):
+            lines.append(f"        ran on an empty record: {note}")
     passed = sum(1 for r in results if r["passed"])
     failed = sum(1 for r in results if not r["passed"])
     total = sum(r["duration_ms"] for r in results)

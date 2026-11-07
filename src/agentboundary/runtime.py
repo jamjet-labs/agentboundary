@@ -45,11 +45,14 @@ class RuntimeOutcome:
     implementation chose not to emit one.
     ``arguments`` is the original arguments object (kept so
     conformance checks can recompute the arguments_hash).
+    ``executed_arguments`` is what the action actually ran with, when the
+    implementation knows it; None if the action did not run.
     """
 
     decision: Decision
     receipt: dict[str, Any] | None
     arguments: dict[str, Any]
+    executed_arguments: dict[str, Any] | None = None
 
 
 class Implementation(ABC):
@@ -68,12 +71,15 @@ class ReferenceImplementation(Implementation):
     the verifier a receipt with a bad approval. With
     ``setup.receipt_version = "agentboundary/v0.2-alpha"`` it emits v0.2-alpha
     receipts, refuses an action whose approval is stale or from an approver
-    the policy does not list, and records every refusal in a ``refusal``
-    block (spec v0.2-alpha section 2.3).
+    the policy does not list, refuses to run arguments other than the ones
+    policy evaluated (``action.executed_arguments`` simulates an agent that
+    changed them after approval), and records every refusal in a
+    ``refusal`` block (spec v0.2-alpha section 2.3).
     """
 
     def attempt(self, action: dict[str, Any], *, setup: dict[str, Any]) -> RuntimeOutcome:
         arguments = action.get("arguments", {})
+        to_execute = action.get("executed_arguments", arguments)
         capability = action.get("tool", {}).get("capability", "")
         emit_v02 = setup.get("receipt_version") == V02_ALPHA
         stamp = setup.get("now") or _now_rfc3339()
@@ -122,6 +128,20 @@ class ReferenceImplementation(Implementation):
             executed = False
             refusal = {"verdict": "deny", "reason_code": "unknown-rule"}
 
+        # Spec v0.1 section 3.4 / threat T-01: arguments that changed after
+        # policy evaluation must not run. The v0.1 mode runs them anyway so a
+        # scenario can hand the verifier a receipt from a runtime that did.
+        error_code: str | None = None
+        mutated = compute_arguments_hash(to_execute) != compute_arguments_hash(arguments)
+        if executed and mutated and emit_v02:
+            decision = "deny"
+            executed = False
+            error_code = "arguments-mutated"
+            # A refusal verdict must agree with policy.decision; nothing
+            # agrees with allow, so an allowed action records only the error.
+            if rule != "allow":
+                refusal = {"verdict": "deny", "reason_code": "arguments-mutated"}
+
         receipt = _build_receipt(
             action=action,
             arguments=arguments,
@@ -133,12 +153,18 @@ class ReferenceImplementation(Implementation):
             now=stamp,
             version=V02_ALPHA if emit_v02 else V01,
             refusal=refusal if emit_v02 else None,
+            error_code=error_code,
         )
 
         for op in action.get("inject", []):
             receipt = _apply_inject(receipt, op)
 
-        return RuntimeOutcome(decision=decision, receipt=receipt, arguments=arguments)
+        return RuntimeOutcome(
+            decision=decision,
+            receipt=receipt,
+            arguments=arguments,
+            executed_arguments=to_execute if executed else None,
+        )
 
 
 def _recordable(approval: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -159,12 +185,6 @@ def _recordable(approval: dict[str, Any] | None) -> dict[str, Any] | None:
         and isinstance(approval.get("approved_at"), str)
     )
     return approval if ok else None
-
-
-# How far an approval may postdate the runtime's clock before it is refused.
-# A small allowance absorbs skew between the approval system and the runtime;
-# beyond it, a forward-dated approval would stretch the window without limit.
-APPROVAL_CLOCK_SKEW_SECONDS: Final = 60
 
 
 def _approval_problem(
@@ -196,15 +216,20 @@ def _approval_problem(
         )
         if not usable:
             return {"verdict": "deny", "reason_code": "approval-window-invalid"}
-        approved_at = _parse_rfc3339(approval.get("approved_at"))
-        current = _parse_rfc3339(now)
-        if approved_at is None or current is None:
-            return {"verdict": "deny", "reason_code": "approval-time-unreadable"}
-        age = (current - approved_at).total_seconds()
-        if not age >= -APPROVAL_CLOCK_SKEW_SECONDS:
-            return {"verdict": "deny", "reason_code": "approval-postdates-action"}
-        if not age <= max_age:
-            return {"verdict": "expired", "reason_code": "approval-window-elapsed"}
+    approved_at = _parse_rfc3339(approval.get("approved_at"))
+    current = _parse_rfc3339(now)
+    if approved_at is None or current is None:
+        # Cannot show the approval precedes the action, window or not.
+        return {"verdict": "deny", "reason_code": "approval-time-unreadable"}
+    age = (current - approved_at).total_seconds()
+    # Checked with or without a window, and with no skew allowance: spec v0.1
+    # section 2.7 needs approved_at to precede execution.completed_at, which
+    # this runtime stamps with its clock, so an approval at or after now
+    # would make the receipt invalid.
+    if not age > 0:
+        return {"verdict": "deny", "reason_code": "approval-postdates-action"}
+    if max_age is not None and not age <= max_age:
+        return {"verdict": "expired", "reason_code": "approval-window-elapsed"}
     return None
 
 
@@ -232,6 +257,7 @@ def _build_receipt(
     now: str | None = None,
     version: str = "agentboundary/v0.1",
     refusal: dict[str, str] | None = None,
+    error_code: str | None = None,
 ) -> dict[str, Any]:
     """Assemble an Action Receipt for the given action + policy outcome.
 
@@ -300,6 +326,8 @@ def _build_receipt(
             "status": "blocked",
             "completed_at": stamp,
         }
+        if error_code is not None:
+            receipt["execution"]["error_code"] = error_code
     if refusal is not None:
         receipt["refusal"] = dict(refusal)
     receipt["receipt_hash"] = compute_receipt_hash(receipt)

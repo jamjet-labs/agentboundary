@@ -410,9 +410,11 @@ class TestRuntimeApprovalGuardsFailClosed:
         refusal = self._refusal(_approval(at="2027-06-15T14:23:00Z"), approval_max_age_seconds=60)
         assert refusal == {"verdict": "deny", "reason_code": "approval-postdates-action"}
 
-    def test_small_clock_skew_is_tolerated(self) -> None:
+    def test_approval_after_now_is_refused_without_skew(self) -> None:
+        # v0.1 section 2.7: approved_at must precede execution.completed_at,
+        # which the runtime stamps with now; there is no skew allowance.
         refusal = self._refusal(_approval(at="2026-06-15T14:23:30Z"), approval_max_age_seconds=60)
-        assert refusal is None
+        assert refusal == {"verdict": "deny", "reason_code": "approval-postdates-action"}
 
     def test_approver_entry_without_id_matches_nobody(self) -> None:
         approval = {"capability": "test.cap", "approver": {"type": "human"}, "approved_at": NOW}

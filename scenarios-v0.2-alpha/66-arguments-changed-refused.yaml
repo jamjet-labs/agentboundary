@@ -1,0 +1,43 @@
+name: 66-arguments-changed-refused
+description: |
+  Same as scenario 65, against the v0.2-alpha runtime. It compares the
+  arguments it is asked to run with the ones policy evaluated, refuses,
+  and records the refusal (reason arguments-mutated). Nothing ran on the
+  changed arguments, so Level 4 finds nothing to reject.
+setup:
+  receipt_version: agentboundary/v0.2-alpha
+  now: "2026-06-15T14:23:00Z"
+  policies:
+    - name: acme.claims.mutation
+      version: "5"
+      rule: require-approval
+      capabilities: [spring.service.mutation]
+      approvers:
+        - { id: "user:eng-lead@acme", type: human }
+      approval_max_age_seconds: 600
+  approvals:
+    - capability: spring.service.mutation
+      approver: { type: human, id: "user:eng-lead@acme" }
+      approved_at: "2026-06-15T14:20:00Z"
+action:
+  actor: { type: agent, id: "agent:internal-copilot:session/demo" }
+  agent:
+    framework: spring-ai
+    framework_version: "1.0"
+    model: gpt-4o
+    model_version: "2024-08-06"
+  tool: { name: claims-service, version: "3.2.0", capability: spring.service.mutation }
+  target:
+    system: acme-claims.prod
+    environment: prod
+    resource_id: claim/789
+  arguments: { claim_id: 789, status: APPROVED, payout_cents: 4200 }
+  executed_arguments: { claim_id: 789, status: APPROVED, payout_cents: 420000 }
+expect:
+  decision: deny
+  conformance_level: 4
+  receipt_must_validate: true
+  assertions:
+    - { field: execution.status, equals: blocked }
+    - { field: execution.error_code, equals: arguments-mutated }
+    - { field: refusal.reason_code, equals: arguments-mutated }

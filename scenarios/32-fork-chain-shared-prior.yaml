@@ -1,9 +1,15 @@
 name: 32-fork-chain-shared-prior
 description: |
-  Spec §2.0 permits forking: two receipts can name the same prior_receipt.
-  This scenario shows one branch of such a fork — the verifier's
-  prior_receipt_hashes contains the shared ancestor; the chain check
-  passes cleanly. Fork-resolution policy is verifier-side, not spec-side.
+  Spec v0.2-alpha section 2.0 permits forking: two receipts can name the
+  same prior_receipt. The verifier has already recorded the shared
+  ancestor (...5ec0eddedfa1) and a sibling (...5ec0eddedfa2) that also
+  links to it, and the sibling is the newest receipt it holds. This
+  receipt links to the ancestor, not to the newest receipt, and the chain
+  check still passes: it looks the claimed predecessor up by receipt_id.
+  A verifier that only accepts a link to its latest receipt, the usual
+  "previous hash" log, rejects a fork and fails this scenario.
+  Scenario 29 has one known receipt and no sibling, so it cannot tell the
+  two apart. Fork-resolution policy is verifier-side, not spec-side.
 setup:
   policies:
     - name: agentboundary.repo.merges
@@ -12,6 +18,7 @@ setup:
       capabilities: [github.merge]
   prior_receipt_hashes:
     "0192c8d0-1f2a-7c3e-bf2a-5ec0eddedfa1": "5555555555555555555555555555555555555555555555555555555555555555"
+    "0192c8d0-1f2a-7c3e-bf2a-5ec0eddedfa2": "6666666666666666666666666666666666666666666666666666666666666666"
 action:
   actor: { type: agent, id: "agent:claude-code:session/demo" }
   agent:

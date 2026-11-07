@@ -4,6 +4,19 @@ Everything here runs locally on the bytes it is given: no network, no
 vendor service, no JamJet component. The report says what was checked,
 what failed, and what was not checked and why, because a verifier that
 reports a property it did not check is worse than none.
+
+It also says which of three properties the input established:
+
+* ``hash``: every ``receipt_hash`` matches its receipt. This catches
+  accidental change only. Anyone who can edit a receipt can recompute its
+  hash, so on its own it is not evidence that nobody edited the receipt.
+* ``signed``: every receipt carries an Ed25519 signature that verified
+  under a keyring key, and the keyring binds that key to the receipt's
+  ``actor.id`` (and to the envelope's CWT ``iss``, when it names one).
+* ``chained``: two or more receipts form one unbroken chain from a genesis
+  receipt.
+
+A caller can require any of them; one that is not established then fails.
 """
 
 from __future__ import annotations
@@ -13,7 +26,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agentboundary.conformance import check_conformance
-from agentboundary.cose import Keyring, is_cose_sign1, verify_envelope
+from agentboundary.cose import (
+    ANY_IDENTITY,
+    Keyring,
+    KeyringEntry,
+    binding_allows,
+    is_cose_sign1,
+    verify_envelope,
+)
 from agentboundary.hashing import (
     StrictJSONError,
     canonical_json,
@@ -31,8 +51,10 @@ NOT_CHECKED_STATEMENTS: tuple[str, ...] = (
     "record is intact and, if signed, that a key in the keyring signed it; not "
     "that it is true or that the action had the recorded effect.",
     "Signer identity: a passing signature means a key in the supplied keyring "
-    "signed the envelope. Whether that key belongs to the party it is said to "
-    "belong to is decided by whoever supplied the keyring.",
+    "signed the envelope, and, where the keyring binds that key to actor ids or "
+    "issuers, that the receipt's actor.id and the envelope's iss are among them. "
+    "Whether the key is really held by that party is decided by whoever supplied "
+    "the keyring.",
     "Timestamps are the emitter's own and are not checked against any clock.",
     "Truncation: receipts removed from the end of a stream cannot be detected "
     "from the receipts presented; that needs an external checkpoint.",
@@ -40,6 +62,8 @@ NOT_CHECKED_STATEMENTS: tuple[str, ...] = (
     "detected from one presentation; that needs a transparency log, and no "
     "Transparency Service was consulted.",
     "Unicode normalization (NFC) of strings is not checked; strings are hashed as received.",
+    "CWT claims other than iss and sub (exp, nbf, iat and the rest) are not checked; "
+    "an envelope whose crit lists the CWT Claims header is refused for that reason.",
     "Ed25519 is verified by OpenSSL (through the cryptography package) plus "
     "this verifier's own checks on S and on the public key. The project's tests "
     "hold it to the cofactorless equation with one known vector; that is a test "
@@ -49,6 +73,10 @@ NOT_CHECKED_STATEMENTS: tuple[str, ...] = (
 # Conformance codes the receipt-level checks already report under their own
 # names, so they are not listed twice.
 _REPORTED_ELSEWHERE = frozenset({"SCHEMA_INVALID", "LEVEL_3_RECEIPT_HASH_MISMATCH"})
+
+# Properties a caller can require (``verify --require``). See the module
+# docstring for what each one does and does not show.
+ASSURANCES: tuple[str, ...] = ("hash", "signed", "chained")
 
 
 @dataclass
@@ -74,11 +102,26 @@ class ReceiptReport:
     subject: str | None = None
     signature_verified: bool = False
     key_fingerprint: str | None = None
+    key: KeyringEntry | None = None
+    signer_bound: bool = False  # the verifying key is bound to actor.id (and iss)
 
     @property
     def receipt_id(self) -> str | None:
         rid = (self.receipt or {}).get("receipt_id")
         return rid if isinstance(rid, str) else None
+
+    @property
+    def hash_ok(self) -> bool:
+        return any(c.name == "receipt_hash" and c.status == "pass" for c in self.checks)
+
+    @property
+    def signed(self) -> bool:
+        """Signed by a bound key, and nothing else about this receipt failed."""
+        return (
+            self.signature_verified
+            and self.signer_bound
+            and not any(c.status == "fail" for c in self.checks)
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -89,8 +132,21 @@ class ReceiptReport:
             "kid_bucket": self.kid_bucket,
             "issuer": self.issuer,
             "subject": self.subject,
+            "established": {"hash": self.hash_ok, "signed": self.signed},
             "checks": [c.to_dict() for c in self.checks],
         }
+
+
+@dataclass(frozen=True)
+class Assurance:
+    """Whether the whole input established one property, and why or why not."""
+
+    name: str
+    met: bool
+    detail: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"met": self.met, "detail": self.detail}
 
 
 @dataclass
@@ -98,19 +154,108 @@ class VerifyReport:
     receipts: list[ReceiptReport] = field(default_factory=list)
     chain: list[Check] = field(default_factory=list)
     not_checked: tuple[str, ...] = NOT_CHECKED_STATEMENTS
+    required: tuple[str, ...] = ("hash",)
 
     @property
     def ok(self) -> bool:
         every = [*self.chain, *(c for r in self.receipts for c in r.checks)]
         return not any(c.status == "fail" for c in every)
 
+    def established(self) -> list[Assurance]:
+        """What the input established, property by property (see ``ASSURANCES``)."""
+        return [_hash_assurance(self), _signed_assurance(self), _chained_assurance(self)]
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
+            "required": list(self.required),
+            "established": {a.name: a.to_dict() for a in self.established()},
             "receipts": [r.to_dict() for r in self.receipts],
             "chain": [c.to_dict() for c in self.chain],
             "not_checked": list(self.not_checked),
         }
+
+
+def _hash_assurance(report: VerifyReport) -> Assurance:
+    if not report.receipts:
+        return Assurance("hash", False, "no receipts were presented")
+    bad = [r.source for r in report.receipts if not r.hash_ok]
+    if bad:
+        return Assurance("hash", False, f"receipt_hash did not match for {', '.join(bad)}")
+    return Assurance(
+        "hash",
+        True,
+        "every receipt_hash matches its receipt. This catches accidental change only: "
+        "anyone who can edit a receipt can recompute its hash, so it is not evidence "
+        "that the receipt is unedited",
+    )
+
+
+def _why_not_signed(r: ReceiptReport) -> str:
+    if r.form == "bare":
+        return "bare receipt, no signature"
+    if not r.signature_verified:
+        return "signature not verified"
+    if r.key is not None and r.key.actor_ids is None:
+        return f"key {r.kid!r} is not bound to any actor in the keyring"
+    if r.issuer is not None and r.key is not None and r.key.issuers is None:
+        return f"key {r.kid!r} is not bound to any issuer in the keyring"
+    if r.kid_bucket != "protected":
+        return "kid is unprotected, so the key binding is not relied on"
+    return f"key {r.kid!r} may not sign for this receipt's actor or issuer"
+
+
+def _signed_assurance(report: VerifyReport) -> Assurance:
+    if not report.receipts:
+        return Assurance("signed", False, "no receipts were presented")
+    unsigned = [f"{r.source} ({_why_not_signed(r)})" for r in report.receipts if not r.signed]
+    if unsigned:
+        return Assurance("signed", False, "; ".join(unsigned))
+    return Assurance(
+        "signed",
+        True,
+        "every receipt carries a signature that verified under a keyring key bound to "
+        "the receipt's actor",
+    )
+
+
+def _chain_complete(report: VerifyReport) -> str | None:
+    """Why the receipts do not form a verified chain, or None if they do."""
+    if len(report.receipts) < 2:
+        return "fewer than two receipts were presented, so no link was checked"
+    bad = [
+        r.source
+        for r in report.receipts
+        if any(c.status == "fail" and c.code != "SIGNER_UNBOUND" for c in r.checks)
+    ]
+    if bad:
+        return f"receipt checks failed for {', '.join(bad)}"
+    failures = {
+        c.code
+        for c in report.chain
+        if c.status == "fail" and c.code is not None and c.code != "CHAIN_REQUIRED"
+    }
+    if failures:
+        return f"chain checks failed ({', '.join(sorted(failures))})"
+    names = {c.name for c in report.chain if c.status == "pass"}
+    missing = {"chain.genesis", "chain.links", "chain.unique_ids"} - names
+    if missing:
+        return f"chain checks did not run ({', '.join(sorted(missing))})"
+    return None
+
+
+def _chained_assurance(report: VerifyReport) -> Assurance:
+    why = _chain_complete(report)
+    if why is not None:
+        return Assurance("chained", False, why)
+    return Assurance(
+        "chained",
+        True,
+        f"{len(report.receipts)} receipts link in order from a genesis receipt, so none "
+        "was removed, inserted or reordered between the first and the last. Someone who "
+        "can rewrite every receipt can rebuild the chain, and a missing tail is not "
+        "detected",
+    )
 
 
 def load_items(sources: Iterable[tuple[str, bytes]]) -> list[Item]:
@@ -163,18 +308,42 @@ def verify_items(
     *,
     as_signed_statement: bool = False,
     require_signature: bool = False,
+    require: Iterable[str] = (),
 ) -> VerifyReport:
     """Verify each item, then the chain they form in presentation order.
 
     Supplying a keyring means the caller expects signed receipts, so it
-    implies ``require_signature``: otherwise an unsigned receipt could be
-    slipped into a signed chain and pass.
+    implies ``require=("signed",)``, as ``verify --keys`` does: every receipt
+    must carry a signature that verifies under a keyring key bound to its
+    actor (and to its issuer, if the envelope names one). Otherwise an
+    unsigned receipt could be slipped into a signed chain, or a key could
+    vouch for an actor it was never trusted for. An envelope's signature
+    must verify whatever is required: a signature that is present but was
+    not checked is not reported as passing.
+
+    ``require`` names properties from ``ASSURANCES`` that must be
+    established. ``require_signature`` alone asks only for a verified
+    signature, with no key binding; it is kept for callers that have no
+    keyring and want bare receipts to fail.
     """
-    require_signature = require_signature or keyring is not None
-    report = VerifyReport()
+    if keyring is not None:
+        require = (*require, "signed")
+    required = tuple(dict.fromkeys(("hash", *(r for r in ASSURANCES if r in require))))
+    required = (*required, *(r for r in dict.fromkeys(require) if r not in ASSURANCES))
+    unknown = [r for r in required if r not in ASSURANCES]
+    if unknown:
+        raise ValueError(f"unknown requirement(s) {unknown}; choose from {list(ASSURANCES)}")
+    require_signature = require_signature or keyring is not None or "signed" in required
+    report = VerifyReport(required=required)
     for item in items:
         try:
-            rr = _verify_one(item, keyring, as_signed_statement, require_signature)
+            rr = _verify_one(
+                item,
+                keyring,
+                as_signed_statement,
+                require_signature,
+                require_bound="signed" in required,
+            )
         except Exception as exc:  # last line of defence: report, never crash
             rr = ReceiptReport(item.source, item.form)
             rr.checks.append(failed("internal", "VERIFIER_ERROR", f"{type(exc).__name__}: {exc}"))
@@ -183,6 +352,12 @@ def verify_items(
         report.chain = _chain_checks(report.receipts)
     except Exception as exc:
         report.chain = [failed("chain", "VERIFIER_ERROR", f"{type(exc).__name__}: {exc}")]
+    if "chained" in required:
+        why = _chain_complete(report)
+        if why is not None:
+            report.chain.append(
+                failed("chain.required", "CHAIN_REQUIRED", f"a chain was required: {why}")
+            )
     return report
 
 
@@ -191,6 +366,8 @@ def _verify_one(
     keyring: Keyring | None,
     as_signed_statement: bool,
     require_signature: bool,
+    *,
+    require_bound: bool = False,
 ) -> ReceiptReport:
     rr = ReceiptReport(item.source, item.form)
     checks = rr.checks
@@ -209,11 +386,16 @@ def _verify_one(
             c.name == "cose.signature" and c.status == "pass" for c in env.checks
         )
         rr.key_fingerprint = env.key_fingerprint
+        rr.key = env.key if rr.signature_verified else None
         if env.payload is None:
             return rr
         receipt = _receipt_from_payload(env.payload, checks)
         if receipt is None:
             return rr
+        # An envelope presents a signature. Left unchecked it must not pass:
+        # without keys, an envelope whose payload or signature was altered
+        # looks exactly like an intact one.
+        require_signature = True
     else:
         assert item.receipt is not None
         receipt = item.receipt
@@ -235,16 +417,114 @@ def _verify_one(
             )
 
     rr.receipt = receipt
+    if rr.key is not None:
+        checks.extend(_binding_checks(rr, receipt))
     if require_signature and not rr.signature_verified:
+        if item.form == "cose" and keyring is None:
+            why = (
+                "the envelope carries a signature that was not verified because no keys "
+                "were supplied (--keys); an altered envelope looks the same without them"
+            )
+        elif item.form == "cose":
+            why = "the envelope's signature did not verify under the supplied keys"
+        else:
+            why = (
+                "a signature was required (--require signed, or --keys) and a bare "
+                "receipt carries none"
+            )
+        checks.append(failed("signature.required", "SIGNATURE_REQUIRED", why))
+    elif require_bound and not rr.signer_bound and not _has_binding_failure(checks):
         checks.append(
             failed(
-                "signature.required",
-                "SIGNATURE_REQUIRED",
-                "a signature was required (--require-signature, or --keys) and none was verified",
+                "signer.required",
+                "SIGNER_UNBOUND",
+                f"a signed receipt was required, and {_why_not_signed(rr)}; bind the key "
+                "with actor_ids (and issuers) in the keyring",
             )
         )
     checks.extend(_receipt_checks(receipt))
     return rr
+
+
+_BINDING_FAILURES = frozenset({"SIGNER_ACTOR_MISMATCH", "SIGNER_ISSUER_MISMATCH"})
+
+
+def _has_binding_failure(checks: list[Check]) -> bool:
+    return any(c.code in _BINDING_FAILURES for c in checks)
+
+
+def _binding_checks(rr: ReceiptReport, receipt: dict[str, Any]) -> list[Check]:
+    """Check the verifying key may sign for the receipt's actor and the envelope's iss.
+
+    A key the keyring binds to identities may not vouch for any other; a key
+    with no binding is reported as such, never as passing.
+    """
+    key = rr.key
+    assert key is not None
+    out: list[Check] = []
+    actor = receipt.get("actor")
+    actor_id = actor.get("id") if isinstance(actor, dict) else None
+    actor_ok: bool | None = None
+    if not isinstance(actor_id, str):
+        out.append(not_checked("signer.actor", "the receipt has no string actor.id"))
+    else:
+        actor_ok = binding_allows(key.actor_ids, actor_id)
+        if actor_ok is None:
+            out.append(
+                not_checked(
+                    "signer.actor",
+                    f"key {key.kid!r} declares no actor_ids, so which actors it may sign "
+                    "for was not checked",
+                )
+            )
+        elif actor_ok:
+            scope = "any actor" if key.actor_ids == (ANY_IDENTITY,) else f"actor {actor_id!r}"
+            out.append(passed("signer.actor", f"key {key.kid!r} is bound to {scope}"))
+        else:
+            out.append(
+                failed(
+                    "signer.actor",
+                    "SIGNER_ACTOR_MISMATCH",
+                    f"key {key.kid!r} is bound to actor_ids {list(key.actor_ids or ())}, "
+                    f"not to actor.id {actor_id!r}",
+                )
+            )
+
+    issuer_ok: bool | None = True
+    if rr.issuer is not None:
+        issuer_ok = binding_allows(key.issuers, rr.issuer)
+        if issuer_ok is None:
+            out.append(
+                not_checked(
+                    "signer.issuer",
+                    f"iss {rr.issuer!r} is asserted by the signer; key {key.kid!r} "
+                    "declares no issuers, so it was not checked",
+                )
+            )
+        elif issuer_ok:
+            out.append(passed("signer.issuer", f"key {key.kid!r} may sign for iss {rr.issuer!r}"))
+        else:
+            out.append(
+                failed(
+                    "signer.issuer",
+                    "SIGNER_ISSUER_MISMATCH",
+                    f"key {key.kid!r} is bound to issuers {list(key.issuers or ())}, "
+                    f"not to iss {rr.issuer!r}",
+                )
+            )
+    protected_kid = rr.kid_bucket == "protected"
+    if not protected_kid:
+        # Anyone can change an unprotected kid without breaking the signature,
+        # and so pick between keyring entries that share a key but not a
+        # binding. The binding is not relied on.
+        out.append(
+            not_checked(
+                "signer.kid",
+                "kid is in the unprotected header, so the binding it selects is not relied on",
+            )
+        )
+    rr.signer_bound = actor_ok is True and issuer_ok is True and protected_kid
+    return out
 
 
 def _receipt_from_payload(payload: bytes, checks: list[Check]) -> dict[str, Any] | None:

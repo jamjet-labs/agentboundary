@@ -83,7 +83,9 @@ Each threat is rated by its conformance-level coverage. Level 4 implementations 
 
 **Mitigation:** `receipt_hash` MUST be SHA-256 of the canonicalized receipt content. Any field modification produces a hash mismatch that an auditor detects.
 
-**Defends at:** Level 3 (receipt-hash verification is Level 3).
+An attacker who can rewrite the receipt (§2.3) can recompute `receipt_hash` as well, so the mismatch appears only when the auditor holds the expected hash from a source the attacker cannot rewrite: a signature over the receipt (T-07), a later receipt that links to it, or an external log.
+
+**Defends at:** Level 3 (receipt-hash verification is Level 3), against modification by anyone who cannot also rewrite the hash.
 
 ### 3.6 T-06: Receipt suppression
 

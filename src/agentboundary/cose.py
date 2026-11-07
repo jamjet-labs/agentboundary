@@ -216,6 +216,18 @@ class KeyringEntry:
     actor_ids: tuple[str, ...] | None = None
     issuers: tuple[str, ...] | None = None
 
+    def __post_init__(self) -> None:
+        # A str here would make "x in bound" a substring test.
+        for name in ("actor_ids", "issuers"):
+            bound = getattr(self, name)
+            ok = bound is None or (
+                isinstance(bound, tuple)
+                and bool(bound)
+                and all(isinstance(v, str) and v for v in bound)
+            )
+            if not ok:
+                raise TypeError(f"KeyringEntry.{name} must be None or a non-empty tuple of str")
+
 
 @dataclass(frozen=True)
 class Keyring:
@@ -457,7 +469,14 @@ class EnvelopeResult:
 
     @property
     def ok(self) -> bool:
-        return not any(c.status == "fail" for c in self.checks)
+        """No check failed AND the signature verified under the keyring.
+
+        A signature that was not checked (no keyring) is not ok: without the
+        key, an altered envelope looks the same as an intact one.
+        """
+        if any(c.status == "fail" for c in self.checks):
+            return False
+        return any(c.name == "cose.signature" and c.status == "pass" for c in self.checks)
 
 
 def is_cose_sign1(data: bytes) -> bool:
@@ -476,7 +495,9 @@ def verify_envelope(
     Reports each step in ``result.checks``. ``result.payload`` is set when
     the structure was sound enough to extract the payload, whether or not
     the signature verified, so the caller can still report on the receipt;
-    callers must read ``result.ok`` before trusting it.
+    callers must read ``result.ok`` before trusting it. ``result.ok`` is
+    False whenever the signature was not verified, including when no
+    keyring was given.
     """
     import cbor2
 
@@ -671,6 +692,12 @@ def verify_envelope(
             )
         )
 
+    claims_problem = _cwt_claims_problem(protected)
+    if claims_problem is not None:
+        # A malformed iss must not read as "no iss": that would skip the
+        # issuer binding of the signing key.
+        checks.append(failed("cose.cwt_claims", "COSE_CWT_CLAIMS_INVALID", claims_problem))
+        return res
     res.issuer, res.subject = _cwt_iss_sub(protected)
     sig_check, res.key = _check_signature(protected_bytes, payload, signature, kid, keyring)
     if res.key is not None:
@@ -718,6 +745,27 @@ def _ed25519_verify(public_key: bytes, signature: bytes, message: bytes) -> bool
     except InvalidSignature:
         return False
     return True
+
+
+def _cwt_claims_problem(protected: Mapping[Any, Any]) -> str | None:
+    """Why the protected CWT Claims header is unusable, or None.
+
+    Absent is fine. Present, it must be a map whose keys are integers or text
+    strings, whose ``iss`` (1) and ``sub`` (2), when present, are non-empty
+    text, and which does not spell them as text keys "iss"/"sub" (RFC 8392
+    gives them integer keys; a verifier must not guess).
+    """
+    if HDR_CWT_CLAIMS not in protected:
+        return None
+    claims = protected[HDR_CWT_CLAIMS]
+    if not isinstance(claims, Mapping) or not all(_is_label(k) for k in claims):
+        return "CWT Claims (label 15) must be a map keyed by integers or text strings"
+    for label, name in ((CWT_ISS, "iss"), (CWT_SUB, "sub")):
+        if label in claims and not (isinstance(claims[label], str) and claims[label]):
+            return f"CWT claim {name} ({label}) must be a non-empty text string"
+        if name in claims:
+            return f'CWT claim {name} must use integer key {label}, not the text key "{name}"'
+    return None
 
 
 def _cwt_iss_sub(protected: Mapping[Any, Any]) -> tuple[str | None, str | None]:

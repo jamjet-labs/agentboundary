@@ -111,7 +111,7 @@ What is **not** done:
 
 - Nothing is submitted to, or checked against, a Transparency Service. The verifier reports registration as not checked.
 - An attached Transparency Receipt (RFC 9943 unprotected header 394, the RFC 9942 object) is reported as present and not checked. Inclusion and consistency proofs are not verified.
-- `iss` is bound to the signing key only as far as the verifier's keyring says: a key whose JWK lists `issuers` may sign only for those (`SIGNER_ISSUER_MISMATCH` otherwise). A key without `issuers` leaves `iss` issuer-asserted. Establishing that the issuer really holds the key is the Transparency Service's job (draft §7 item 1) and is not attempted.
+- `iss` is bound to the signing key only as far as the verifier's keyring says: a key whose JWK lists `issuers` may sign only for those (`SIGNER_ISSUER_MISMATCH` otherwise). A key without `issuers` leaves `iss` issuer-asserted, and the receipt does not count as signed by a bound key (`SIGNER_UNBOUND` when that is required). A malformed `iss` fails (`COSE_CWT_CLAIMS_INVALID`). Establishing that the issuer really holds the key is the Transparency Service's job (draft §7 item 1) and is not attempted.
 - The draft's registration policy also requires the service to verify the payload's native signature (§7 item 4) and that `sub` equals `scope.chain` (§7 item 5). An AgentBoundary receipt has neither, so a service enforcing the draft's policy would refuse it.
 
 ## 6. Chains

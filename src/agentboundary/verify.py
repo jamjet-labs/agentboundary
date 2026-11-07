@@ -193,6 +193,8 @@ def _why_not_signed(r: ReceiptReport) -> str:
         return f"key {r.kid!r} is not bound to any actor in the keyring"
     if r.issuer is not None and r.key is not None and r.key.issuers is None:
         return f"key {r.kid!r} is not bound to any issuer in the keyring"
+    if r.kid_bucket != "protected":
+        return "kid is unprotected, so the key binding is not relied on"
     return f"key {r.kid!r} may not sign for this receipt's actor or issuer"
 
 
@@ -214,6 +216,13 @@ def _chain_complete(report: VerifyReport) -> str | None:
     """Why the receipts do not form a verified chain, or None if they do."""
     if len(report.receipts) < 2:
         return "fewer than two receipts were presented, so no link was checked"
+    bad = [
+        r.source
+        for r in report.receipts
+        if any(c.status == "fail" and c.code != "SIGNER_UNBOUND" for c in r.checks)
+    ]
+    if bad:
+        return f"receipt checks failed for {', '.join(bad)}"
     failures = {
         c.code
         for c in report.chain
@@ -489,7 +498,18 @@ def _binding_checks(rr: ReceiptReport, receipt: dict[str, Any]) -> list[Check]:
                     f"not to iss {rr.issuer!r}",
                 )
             )
-    rr.signer_bound = actor_ok is True and issuer_ok is True
+    protected_kid = rr.kid_bucket == "protected"
+    if not protected_kid:
+        # Anyone can change an unprotected kid without breaking the signature,
+        # and so pick between keyring entries that share a key but not a
+        # binding. The binding is not relied on.
+        out.append(
+            not_checked(
+                "signer.kid",
+                "kid is in the unprotected header, so the binding it selects is not relied on",
+            )
+        )
+    rr.signer_bound = actor_ok is True and issuer_ok is True and protected_kid
     return out
 
 

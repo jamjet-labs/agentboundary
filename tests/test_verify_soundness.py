@@ -338,3 +338,81 @@ class TestCliBinding:
         result = runner.invoke(main, ["verify", "--keys", str(pub), str(out)])
         assert result.exit_code == 1, result.output
         assert "SIGNER_UNBOUND" in result.output
+
+
+class TestReviewFindings:
+    """Second-review findings on the first version of this change."""
+
+    def test_verify_envelope_without_keys_is_not_ok(self, key: Any) -> None:
+        from agentboundary.cose import verify_envelope
+
+        env = bytearray(sign_receipt(_receipt(), key, KID))
+        env[-40] ^= 0x01
+        assert not verify_envelope(bytes(env), None).ok
+        assert not verify_envelope(sign_receipt(_receipt(), key, KID), None).ok
+
+    def test_malformed_iss_cannot_skip_the_issuer_binding(self, key: Any) -> None:
+        from agentboundary.cose import (
+            HDR_CWT_CLAIMS,
+            build_protected_header,
+            sign_payload,
+        )
+        from agentboundary.hashing import canonical_json
+
+        jwk = public_jwk(key, KID)
+        jwk.update(actor_ids=[ACTOR], issuers=["issuer-a"])
+        ring = load_keyring({"keys": [jwk]})
+        protected = build_protected_header(KID)
+        protected[HDR_CWT_CLAIMS] = {1: b"issuer-b", 2: "s"}
+        env = sign_payload(protected, {}, canonical_json(_receipt()).encode(), key)
+        report = verify_items(load_items([("r.cose", env)]), ring, require=("signed",))
+        assert not report.ok
+        assert "COSE_CWT_CLAIMS_INVALID" in _codes(report)
+        assert not _established(report)["signed"]
+
+    def test_unprotected_kid_does_not_establish_signed(self, key: Any) -> None:
+        from agentboundary.cose import HDR_KID, build_protected_header, sign_payload
+        from agentboundary.hashing import canonical_json
+
+        jwk = public_jwk(key, KID)
+        jwk.update(actor_ids=[ACTOR])
+        ring = load_keyring({"keys": [jwk]})
+        protected = build_protected_header(KID)
+        del protected[HDR_KID]
+        env = sign_payload(
+            protected, {HDR_KID: KID.encode()}, canonical_json(_receipt()).encode(), key
+        )
+        report = verify_items(load_items([("r.cose", env)]), ring, require=("signed",))
+        assert not _established(report)["signed"]
+        assert "SIGNER_UNBOUND" in _codes(report)
+
+    def test_invalid_receipts_do_not_establish_chained(self) -> None:
+        chain = []
+        for i in range(2):
+            r = _receipt()
+            r["version"] = "agentboundary/v0.2-alpha"
+            r["receipt_id"] = 1 if i == 0 else f"0192c8d0-1f2a-7c3e-bf2a-{i:012x}"
+            if chain:
+                r["prior_receipt"] = {"receipt_id": True, "receipt_hash": chain[-1]["receipt_hash"]}
+            r.pop("receipt_hash")
+            r["receipt_hash"] = compute_receipt_hash(r)
+            chain.append(r)
+        report = verify_items(load_items([("c.json", json.dumps(chain).encode())]), None)
+        assert not report.ok
+        assert not _established(report)["chained"]
+
+    def test_receipt_id_cannot_forge_report_lines(self, runner: CliRunner, tmp_path: Path) -> None:
+        r = _receipt()
+        r["receipt_id"] = "x\n\nEstablished\n  signed    yes\nResult: PASS"
+        path = tmp_path / "r.json"
+        path.write_text(json.dumps(r))
+        result = runner.invoke(main, ["verify", str(path)])
+        assert result.exit_code == 1
+        assert "\nResult: PASS" not in result.output
+        assert "\n  signed    yes" not in result.output
+
+    def test_keyring_entry_rejects_a_string_binding(self) -> None:
+        from agentboundary.cose import KeyringEntry
+
+        with pytest.raises(TypeError):
+            KeyringEntry("k", b"\x00" * 32, actor_ids="agent:claude-code")  # type: ignore[arg-type]

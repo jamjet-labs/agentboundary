@@ -339,7 +339,14 @@ def verify(
     sys.exit(0 if report.ok else 1)
 
 
-def _tamper_evidence(established: dict[str, bool]) -> str:
+def _printable(text: str) -> str:
+    """Text from the input, escaped if it could forge or hide report lines."""
+    return text if text.isprintable() else repr(text)
+
+
+def _tamper_evidence(established: dict[str, bool], ok: bool) -> str:
+    if not ok:
+        return "Tamper evidence: not claimed, because checks failed (see FAIL above)."
     if established["signed"]:
         return (
             "Tamper evidence: established. Each receipt is signed by a key the keyring "
@@ -348,8 +355,8 @@ def _tamper_evidence(established: dict[str, bool]) -> str:
     if established["chained"]:
         return (
             "Tamper evidence: partial. The links show no receipt was removed, inserted "
-            "or reordered, but receipts are unsigned, so someone who can rewrite all of "
-            "them can rebuild the chain."
+            "or reordered, but not every receipt is signed by a key bound to its actor, "
+            "so someone who can rewrite all of them can rebuild the chain."
         )
     return (
         "Tamper evidence: not established. A receipt can be edited and its "
@@ -366,23 +373,23 @@ def _format_verify(report: Any, have_keys: bool) -> str:
             "",
         ]
     for r in report.receipts:
-        rid = f"  receipt_id {r.receipt_id}" if r.receipt_id else ""
-        lines.append(f"{r.source}  [{r.form}]{rid}")
+        rid = f"  receipt_id {_printable(r.receipt_id)}" if r.receipt_id else ""
+        lines.append(f"{_printable(r.source)}  [{r.form}]{rid}")
         for c in r.checks:
             code = f"{c.code}: " if c.code else ""
-            lines.append(f"  {marks[c.status]}  {c.name:<34s} {code}{c.detail}")
+            lines.append(f"  {marks[c.status]}  {c.name:<34s} {code}{_printable(c.detail)}")
         lines.append("")
     lines.append(f"chain ({len(report.receipts)} item(s), in the order given)")
     for c in report.chain:
         code = f"{c.code}: " if c.code else ""
-        lines.append(f"  {marks[c.status]}  {c.name:<34s} {code}{c.detail}")
+        lines.append(f"  {marks[c.status]}  {c.name:<34s} {code}{_printable(c.detail)}")
     lines += ["", "Not checked by this verifier, whatever the input:"]
     lines += [f"  - {s}" for s in report.not_checked]
     established = report.established()
     lines += ["", "Established"]
     for a in established:
-        lines.append(f"  {a.name:<9s} {'yes' if a.met else 'no ':<4s} {a.detail}")
-    lines.append(_tamper_evidence({a.name: a.met for a in established}))
+        lines.append(f"  {a.name:<9s} {'yes' if a.met else 'no ':<4s} {_printable(a.detail)}")
+    lines.append(_tamper_evidence({a.name: a.met for a in established}, report.ok))
     lines.append(f"Required: {', '.join(report.required)}")
     failures = sum(
         1
